@@ -12,13 +12,13 @@ No API key, no login, no account — nothing leaves your PC.
 
 ## Setup
 
-**1. Put the `.exe` in its own folder** — e.g. `Desktop\RivultTracker`.
+**1. Extract the zip.** You get a folder called `RivultTracker`. Put it
+wherever you like — Desktop is fine.
 
-This matters. It creates its database and log file *next to itself*, so if you
-leave it in Downloads your stats end up scattered in there. If you move the exe
-later, move the whole folder or you'll leave your history behind.
+**Keep the folder together.** `RivultTracker.exe` needs the `_internal` folder
+next to it; copying the exe out on its own won't work.
 
-**2. Double-click it.**
+**2. Run `RivultTracker.exe` inside it.**
 
 **3. Windows will say "Windows protected your PC."** Click **More info** →
 **Run anyway**. This happens because the app isn't code-signed — a certificate
@@ -26,8 +26,11 @@ costs a few hundred a year and I'd like to find out whether anyone actually
 uses this first. Your antivirus might also flag it; there's an
 [honest explanation](#about-the-antivirus-warnings) below.
 
-**4. The dashboard opens.** No console window — progress goes to `rivult.log`
-next to the exe.
+**4. The dashboard opens.** No console window — progress and errors go to
+`rivult.log` in `%LOCALAPPDATA%\Rivult`.
+
+Your stats live in `%LOCALAPPDATA%\Rivult`, not in the app folder, so you can
+move or delete the folder without losing your history.
 
 ### First run takes a minute or two
 
@@ -90,10 +93,16 @@ and so on all work (letters and digits need a modifier).
 
 ### Updates
 
-From v0.5.2 on it updates itself. When a new build is out, the **Updates** page
-shows an *Install & restart* button that downloads it and swaps itself in. It
-won't interrupt a game in progress. Install this first one by hand; after that
-you shouldn't need to come back here.
+It updates itself. When a new build is out, the **Updates** page shows an
+*Install & restart* button. It won't interrupt a game in progress, and if the
+swap fails it restores your old version rather than leaving you with a broken
+install. Install the first one by hand; after that you shouldn't need to come
+back here.
+
+> **On v0.5.2?** Install v0.6.0 by hand — don't use the in-app updater. 0.5.2
+> expects a single `.exe` and would write the new `.zip` over its own exe.
+> Delete the old exe and extract this one fresh; your stats are picked up
+> automatically.
 
 ---
 
@@ -116,15 +125,20 @@ you shouldn't need to come back here.
 A couple of engines flag this. They're false positives, but I'd rather explain
 than tell you to trust me.
 
-The app is a Python program packaged into an `.exe` with a tool called
-PyInstaller. That packaging is also popular with real malware, so scanners are
-suspicious of it by default — Microsoft's flag for it literally ends in `!ml`,
-meaning a machine-learning guess rather than an actual match.
+The app is a Python program packaged with a tool called PyInstaller. That
+packaging is also popular with real malware, so scanners are suspicious of it
+by default — Microsoft's flag for it literally ends in `!ml`, meaning a
+machine-learning guess rather than an actual match.
+
+v0.6.0 dropped the single-file format for exactly this reason: it used to
+unpack itself into a temp directory and run from there on every launch, which
+is what self-extracting malware does. It no longer does that, which should
+help — though it won't clear every engine on its own.
 
 It also genuinely does a few things that look alarming without context: it
 reads Minecraft's log file, watches a fixed set of eight movement keys for the
 bridging analyser, can type `/locraw` for you if you turn that on, and can
-replace its own `.exe` when updating.
+replace its own folder when updating.
 
 What it does **not** do: it doesn't capture text or passwords (the key watcher
 is limited to WASD / shift / space / mouse and physically can't read letters),
@@ -138,8 +152,9 @@ app, that's a completely reasonable call.
 
 ## Your data
 
-Everything lives in `bedwars.db` next to the exe. Nothing is uploaded. To
-uninstall: right-click the tray icon → **Exit**, then delete the folder.
+Everything lives in `%LOCALAPPDATA%\Rivult`. Nothing is uploaded. To uninstall:
+right-click the tray icon → **Exit**, delete the `RivultTracker` folder, then
+delete `%LOCALAPPDATA%\Rivult`.
 
 ---
 
