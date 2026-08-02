@@ -1,9 +1,24 @@
-RIVULT BEDWARS TRACKER — test build v0.11.0
+RIVULT BEDWARS TRACKER — test build v0.12.0
 ===========================================
 
 Thanks for testing. This reads your Minecraft chat log and turns it into
 per-game stats you can tag and filter. No Hypixel API, no login, nothing
 leaves your PC.
+
+
+NEW IN 0.12.0
+-------------
+* RIVULT IS NOW OPEN SOURCE (MIT): github.com/rivult/rivult-tracker
+  If you assumed this was a RAT, that's a fair assumption for an unsigned
+  Minecraft tool -- so now you don't have to take my word for it. Read the
+  code, or build it yourself.
+* THIS BUILD WAS MADE BY GITHUB ACTIONS, not on my PC, and it carries a build
+  provenance attestation. You can verify the zip you downloaded really came
+  from the public source:
+      gh attestation verify RivultTracker-v0.12.0.zip --repo rivult/rivult-tracker
+  Open source proves the CODE is clean. The attestation proves the BINARY was
+  built from it, which is the part that actually matters.
+* No functional changes from 0.11.0 -- this release exists to be verifiable.
 
 
 NEW IN 0.11.0

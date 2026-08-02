@@ -219,8 +219,8 @@ gh attestation verify RivultTracker-v0.11.0.zip --repo rivult/rivult-tracker
 That's the part that matters. Open source proves the *code* is fine; the
 attestation proves the *binary you're about to run* was built from it.
 
-> Note: v0.11.0 predates the CI pipeline and was built locally, so it has no
-> attestation. From v0.12.0 onward every release does.
+v0.12.0 was the first release built this way. v0.11.0 and earlier were built
+locally and have no attestation.
 
 **Or build it yourself:**
 
