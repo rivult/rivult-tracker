@@ -1,49 +1,105 @@
 # Rivult Bedwars Tracker
 
-A stats tracker for Hypixel BedWars that reads your Minecraft chat log.
-No API key, no login, no account — nothing leaves your PC.
+**Every BedWars game you've ever played, already tracked.**
 
-## [⬇ Download for Windows](https://github.com/rivult/rivult-tracker/releases/latest)
+Rivult reads Minecraft's own chat log. No API key, no login, no account —
+and on first launch it reads your *old* log files too, so you don't start from
+zero. How far back it goes depends on how many logs your client kept; the
+screenshots below are a real install with 1,685 games in it, going back to
+September.
 
-> **Early test build.** It works, but it's rough in places and I want to know
-> where. Bug reports to **contact@rivult.net** — see [Feedback](#feedback).
+### [⬇ Download for Windows](https://github.com/rivult/rivult-tracker/releases/latest)
+
+<img src="docs/img/trends.png" alt="The Trends page: a rolling FKDR line over the last 500 games with a fitted trend line" width="100%">
+
+> **Early test build.** It works, and it's rough in places — I want to know
+> where. Bug reports to **contact@rivult.net**.
+
+---
+
+## What you actually get
+
+### Am I improving, or does it just feel like it?
+
+The **Trends** page answers exactly that and nothing else. One number, one
+line: your FKDR over the last 100 games against the 100 before, and a fitted
+trend line showing the rate.
+
+The x-axis is *games played*, not dates — a 100-game window can be ten days or
+two months depending on how much you queued, and a date axis quietly makes
+those look the same. This one doesn't.
+
+### Where your FKDR actually goes
+
+<img src="docs/img/how-you-die.png" alt="How You Die breakdown: FKDR split by cause of death" width="100%">
+
+Sixteen breakdowns, each one a hub card that opens into a chart and a sortable
+table. Maps, teammates, modes, time of day, day of week, game flow, kill
+participation, streak state, diamond economy, upgrades, items, session
+position.
+
+They're built to separate, not to look busy. "Bed held" got cut because it won
+99.6% of the time — holding your bed and winning are nearly the same event, so
+the row was measuring itself.
+
+<img src="docs/img/breakdowns.png" alt="The Breakdowns hub: sixteen analysis cards" width="100%">
+
+### Every game, searchable
+
+<img src="docs/img/games.png" alt="The Games page: games grouped by day with per-day W/L and FKDR" width="100%">
+
+Grouped by day with the day's record and FKDR. Filter by map, mode or result,
+or search any player who was in a game with you — opponents included.
+
+### Tag a game without alt-tabbing
+
+Press a key mid-game and it tags that game. A popup slides down from the top of
+your screen in the tag's colour — over fullscreen — and that's it.
+
+`my mistake` · `teammate diff` · `sweats` · `cheater` come pre-bound, and you
+can add your own. Tags then become their own breakdown, so you can ask whether
+the games you tagged `sweats` actually played differently.
+
+### It's all local
+
+Everything lives in `%LOCALAPPDATA%\Rivult`. Nothing is uploaded, there is no
+account, and no part of this needs the internet except the update check.
 
 ---
 
 ## Setup
 
 **1. Extract the zip.** You get a folder called `RivultTracker`. Put it
-wherever you like — Desktop is fine.
+wherever you like.
 
-**Keep the folder together.** `RivultTracker.exe` needs the `_internal` folder
-next to it; copying the exe out on its own won't work.
+**Keep the folder together** — `RivultTracker.exe` needs the `_internal`
+folder next to it.
 
-**2. Run `RivultTracker.exe` inside it.**
+**2. Run `RivultTracker.exe`.**
 
 **3. Windows will say "Windows protected your PC."** Click **More info** →
-**Run anyway**. This happens because the app isn't code-signed — a certificate
-costs a few hundred a year and I'd like to find out whether anyone actually
-uses this first. Your antivirus might also flag it; there's an
+**Run anyway**. The app isn't code-signed; there's an
 [honest explanation](#about-the-antivirus-warnings) below.
 
-**4. The dashboard opens.** No console window — progress and errors go to
-`rivult.log` in `%LOCALAPPDATA%\Rivult`.
+**4. The dashboard opens.** Give it a minute or two on first run — it's
+importing your history from your old rotated logs, and it'll look empty until
+that finishes. After that it follows your games live.
 
-Your stats live in `%LOCALAPPDATA%\Rivult`, not in the app folder, so you can
-move or delete the folder without losing your history.
-
-### First run takes a minute or two
-
-It imports your entire BedWars history from your old rotated log files. That
-can take 1–2 minutes, longer if you have years of logs, and **the dashboard
-will look empty until it finishes**. Just leave it running. After that it
-follows your games live — play one and it shows up a few seconds after it ends.
+Your stats live in `%LOCALAPPDATA%\Rivult`, not the app folder, so you can move
+or delete the folder without losing history.
 
 ### If it stays empty
 
 It auto-detects Lunar, vanilla/Forge/Fabric, Badlion, Prism and MultiMC. If
-nothing appears after a few minutes, go to **Settings → Log source** and either
-pick your client from the list or paste the path to your `latest.log`.
+nothing shows after a few minutes, go to **Settings → Log source** and pick
+your client or paste the path to your `latest.log`.
+
+### Turn on auto commands
+
+**Settings → Auto commands.** Hypixel only tells the log which map and mode
+you're on if `/locraw` runs, and only lists players if `/who` runs. Turning
+this on sends both once at the start of a game, which is what makes maps,
+modes and opponent search accurate. Without it those are best-effort guesses.
 
 ---
 
@@ -51,18 +107,14 @@ pick your client from the list or paste the path to your `latest.log`.
 
 ### Closing minimises to the tray
 
-Clicking **X** doesn't quit — it hides to a tray icon (bottom-right, you may
-need the little `^` arrow) and **keeps tracking in the background**.
+**X** doesn't quit — it hides to a tray icon (bottom-right, possibly under the
+`^` arrow) and keeps tracking.
 
-- Left-click the icon to reopen
-- Right-click → **Exit** to actually quit
-- Launching the exe again while it's hidden just reopens it, it won't start a
-  second copy
+- Left-click to reopen · right-click → **Exit** to quit
+- Launching the exe again just reopens it, it won't start a second copy
 - Prefer X to quit outright? **Settings → Window**
 
-### Tagging games with a keybind
-
-**Settings → Tagging keybinds.** Four tags come pre-bound:
+### Keybinds
 
 | Tag | Key |
 | --- | --- |
@@ -71,52 +123,31 @@ need the little `^` arrow) and **keeps tracking in the background**.
 | sweats | `Ctrl+Alt+F8` |
 | cheater | `Ctrl+Alt+F9` |
 
-Press one during a game and it tags that game without alt-tabbing. A small
-popup slides down from the top of your screen in the tag's colour saying e.g.
-*"tagged cheater"* — it shows over fullscreen.
+- Press mid-game → tags that game when it ends
+- Press within ~2 minutes after → tags that game
+- Press again → removes the tag
 
-- Press mid-game → the tag lands when that game ends
-- Press within ~2 minutes after a game → tags that game
-- Otherwise it's ignored ("no game to tag")
-- Press the same key again to **remove** the tag
-
-Two gotchas:
-
-- **A bound key is taken exclusively while the tracker runs.** Minecraft and
-  everything else stop receiving it. That includes capture software — a bare
-  F-key will break Medal or OBS, which is why the defaults are `Ctrl+Alt`
-  combos.
-- **Restart the app after changing a keybind.** They're registered at startup.
-
-You're not limited to F-keys: letters, digits, numpad, Insert, Home, Page Up
-and so on all work (letters and digits need a modifier).
+Two gotchas: **a bound key is taken exclusively while Rivult runs** (a bare
+F-key would break OBS or Medal, which is why the defaults are `Ctrl+Alt`
+combos), and letters or digits need a modifier.
 
 ### Updates
 
-It updates itself. When a new build is out, the **Updates** page shows an
-*Install & restart* button. It won't interrupt a game in progress, and if the
-swap fails it restores your old version rather than leaving you with a broken
-install. Install the first one by hand; after that you shouldn't need to come
-back here.
-
-> **On v0.5.2?** Install v0.6.0 by hand — don't use the in-app updater. 0.5.2
-> expects a single `.exe` and would write the new `.zip` over its own exe.
-> Delete the old exe and extract this one fresh; your stats are picked up
-> automatically.
+It updates itself — the **Updates** page shows an *Install & restart* button
+when a build is out. It won't interrupt a game, and a failed swap restores your
+old version. Install the first one by hand.
 
 ---
 
 ## Known gaps
 
-- **Cloud sync and accounts aren't in this build.** They're written but the
-  server isn't live, so the UI is hidden rather than showing you a page that
-  only ever errors. Everything works fully offline.
-- **Map names are missing on some games.** Hypixel only prints the map if
-  `/locraw` ran during the game. **Settings → Auto commands** can send it for
-  you automatically.
-- **Alt accounts** are detected separately and only your main counts toward
-  your stats. Tick others on in **Settings → Accounts** if you want them
-  included.
+- **Cloud sync and accounts aren't in this build.** Written, but the server
+  isn't live, so the UI is hidden rather than showing a page that only errors.
+- **Maps are missing on some older games** — see auto commands above.
+- **Alt accounts** are tracked separately and only your main counts. Tick
+  others on in **Settings → Accounts**.
+- **Dream modes** (Lucky Blocks, Ultimate, Swappage…) are tracked but kept out
+  of your stats, since they aren't the same game.
 
 ---
 
@@ -125,53 +156,46 @@ back here.
 A couple of engines flag this. They're false positives, but I'd rather explain
 than tell you to trust me.
 
-The app is a Python program packaged with a tool called PyInstaller. That
-packaging is also popular with real malware, so scanners are suspicious of it
-by default — Microsoft's flag for it literally ends in `!ml`, meaning a
-machine-learning guess rather than an actual match.
+It's a Python program packaged with PyInstaller. That packaging is also popular
+with real malware, so scanners are suspicious of it by default — Microsoft's
+flag for it literally ends in `!ml`, meaning a machine-learning guess rather
+than a match.
 
-v0.6.0 dropped the single-file format for exactly this reason: it used to
-unpack itself into a temp directory and run from there on every launch, which
-is what self-extracting malware does. It no longer does that, which should
-help — though it won't clear every engine on its own.
+It also does a few things that look alarming without context: it reads
+Minecraft's log, watches a fixed set of eight movement keys for the bridging
+analyser, can type `/locraw` if you enable that, and replaces its own folder
+when updating.
 
-It also genuinely does a few things that look alarming without context: it
-reads Minecraft's log file, watches a fixed set of eight movement keys for the
-bridging analyser, can type `/locraw` for you if you turn that on, and can
-replace its own folder when updating.
+What it does **not** do: capture text or passwords (the key watcher is limited
+to WASD / shift / space / mouse and physically cannot read letters), touch your
+Minecraft account, or upload anything.
 
-What it does **not** do: it doesn't capture text or passwords (the key watcher
-is limited to WASD / shift / space / mouse and physically can't read letters),
-it doesn't touch your Minecraft account, and nothing is uploaded anywhere.
-
-I'm working on reducing the flags — the real fix is a code-signing certificate,
-which I'll buy if enough people use this. If you'd rather not run an unsigned
-app, that's a completely reasonable call.
+The real fix is a code-signing certificate, which I'll buy if enough people use
+this. If you'd rather not run an unsigned app, that's a completely reasonable
+call.
 
 ---
 
-## Your data
+## Uninstalling
 
-Everything lives in `%LOCALAPPDATA%\Rivult`. Nothing is uploaded. To uninstall:
-right-click the tray icon → **Exit**, delete the `RivultTracker` folder, then
+Right-click the tray icon → **Exit**, delete the `RivultTracker` folder, then
 delete `%LOCALAPPDATA%\Rivult`.
 
 ---
 
 ## Feedback
 
-**contact@rivult.net** — the address is also in the app under Updates.
+**contact@rivult.net** — also in the app under Updates.
 
 Bug reports beat compliments. **If something crashed or looked wrong, attach
-`rivult.log` from next to the exe** — that's where all the errors go, and it's
-usually the difference between me fixing it and me guessing.
+`rivult.log` from `%LOCALAPPDATA%\Rivult`** — that's where the errors go, and
+it's usually the difference between me fixing it and me guessing.
 
-Things I'd especially like to hear about:
+Especially useful:
 
 - Did it find your log on its own, or did you have to set it manually?
 - How long did the first import take, and how many games did it find?
 - Do the numbers match what you'd expect — FKDR, wins, final kills?
-- Did closing to the tray work, and did reopening and Exit both behave?
-- Did a keybind fire in-game and did you see the popup? Which key, and were
-  you fullscreen or borderless?
+- Did a keybind fire in-game and did you see the popup? Which key, and were you
+  fullscreen or borderless?
 - Anything that looks wrong, empty, or confusing.
