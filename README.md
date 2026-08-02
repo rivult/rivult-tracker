@@ -2,6 +2,12 @@
 
 **Every BedWars game you've ever played, already tracked.**
 
+[![tests](https://github.com/rivult/rivult-tracker/actions/workflows/ci.yml/badge.svg)](https://github.com/rivult/rivult-tracker/actions/workflows/ci.yml)
+[![licence: MIT](https://img.shields.io/badge/licence-MIT-blue.svg)](LICENSE)
+
+**Open source.** Read it, build it yourself, or verify that the download
+matches the code — see [Trust](#trust-dont-take-my-word-for-it).
+
 Rivult reads Minecraft's own chat log. No API key, no login, no account —
 and on first launch it reads your *old* log files too, so you don't start from
 zero. How far back it goes depends on how many logs your client kept; the
@@ -170,9 +176,66 @@ What it does **not** do: capture text or passwords (the key watcher is limited
 to WASD / shift / space / mouse and physically cannot read letters), touch your
 Minecraft account, or upload anything.
 
-The real fix is a code-signing certificate, which I'll buy if enough people use
-this. If you'd rather not run an unsigned app, that's a completely reasonable
-call.
+A code-signing certificate would clear most of this, and I'll buy one if enough
+people use this. Until then, the source is public and the build is
+reproducible in CI — see below, which is a stronger answer than a signature
+anyway.
+
+---
+
+## Trust: don't take my word for it
+
+"It's a RAT" is the default assumption for any unsigned Minecraft tool, and
+it's a fair one. So rather than asking you to trust me:
+
+**The whole thing is here.** All of it — parser, UI, tests.
+
+If you only read three files, read `bedwars_parser/inputrec.py` (the key
+watcher — the eight-key allowlist is hard-coded at the top and there is no
+path to reading anything else), `bedwars_parser/parse.py` (all it does is read
+your log), and `bedwars_parser/autocmd.py` (the only code that types into the
+game, and it types exactly two fixed commands).
+
+**Everything that touches the network**, so you can check the list yourself —
+`grep -rn "urllib\|socket" bedwars_parser/`:
+
+| file | what it does |
+| --- | --- |
+| `server.py` | the dashboard itself, bound to `127.0.0.1` only |
+| `version.py` | update check against this repo's releases API |
+| `app.py` | POSTs to your own `127.0.0.1` to reopen the window |
+| `cloudapi.py` / `sync.py` | optional cloud sync — inert in this build, the server isn't live |
+
+That's the whole list. Nothing else opens a socket.
+
+**Releases are built by GitHub Actions, not on my PC.** Every release zip
+carries a build provenance attestation, so you can check the file you
+downloaded came from this repo at a specific commit:
+
+```
+gh attestation verify RivultTracker-v0.11.0.zip --repo rivult/rivult-tracker
+```
+
+That's the part that matters. Open source proves the *code* is fine; the
+attestation proves the *binary you're about to run* was built from it.
+
+> Note: v0.11.0 predates the CI pipeline and was built locally, so it has no
+> attestation. From v0.12.0 onward every release does.
+
+**Or build it yourself:**
+
+```
+git clone https://github.com/rivult/rivult-tracker
+cd rivult-tracker/frontend && npm ci && npm run build
+cd .. && pip install pyinstaller && python -m PyInstaller RivultTracker.spec
+```
+
+**Run the tests** — 377 backend, 125 frontend:
+
+```
+pip install pytest && python -m pytest tests/ -q
+cd frontend && npx vitest run
+```
 
 ---
 
@@ -180,6 +243,18 @@ call.
 
 Right-click the tray icon → **Exit**, delete the `RivultTracker` folder, then
 delete `%LOCALAPPDATA%\Rivult`.
+
+---
+
+## Contributing
+
+Issues and PRs welcome. `ARCHITECTURE.md` is the design record — schema shapes,
+module boundaries, and the reasoning (with measurements) behind decisions that
+look arbitrary. Read the relevant `Pn` section before changing behaviour; a
+fair number of the odd-looking choices are odd for a reason that's written
+down.
+
+MIT licensed.
 
 ---
 

@@ -1,0 +1,26 @@
+# Build output
+build/
+dist/
+frontend/dist/
+*.spec.bak
+
+# Dependencies
+node_modules/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Your stats database — NEVER commit this, it is your personal game history
+*.db
+*.db-shm
+*.db-wal
+
+# Local logs and scratch
+*.log
+!tests/fixtures/*.log
+.dev.vars
+.env

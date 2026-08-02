@@ -1,0 +1,423 @@
+/** Dimension groupers for the Breakdowns hub — every section detail page is
+ * the same shape: rows of {name, games, fkdr, wins, losses, beds} produced by
+ * slicing the games array a different way. Adding a breakdown = adding a
+ * grouper + a card entry, no restructuring (design handoff, Breakdowns).
+ */
+import type { Game } from "../api/types";
+import { aggregate, type Aggregate } from "./stats";
+
+export interface BreakdownRow {
+  name: string;
+  agg: Aggregate;
+}
+
+/** Display names for game.items categories (parser: resolve.categorize_item). */
+export const ITEM_LABELS: Record<string, string> = {
+  fireball: "Fireball",
+  gapple: "Golden Apple",
+  jump_potion: "Jump Potion",
+  invis_potion: "Invis Potion",
+  speed_potion: "Speed Potion",
+  kb_stick: "KB Stick",
+  pearl: "Ender Pearl",
+  bridge_egg: "Bridge Egg",
+  obsidian: "Obsidian",
+  tnt: "TNT",
+  magic_milk: "Magic Milk",
+  utility: "Defensive gadget",
+  chain_armor: "Chainmail Armor",
+  iron_armor: "Iron Armor",
+  dia_armor: "Diamond Armor",
+  dia_sword: "Diamond Sword",
+  bow: "Bow",
+  water: "Water Bucket",
+};
+
+/** Shop upgrades, shortened for a table row. Anything not listed falls back to
+ * the raw Hypixel string, so a new upgrade shows up rather than vanishing. */
+export const UPGRADE_LABELS: Record<string, string> = {
+  "Sharpened Swords": "Sharpness",
+  "Reinforced Armor I": "Prot I",
+  "Reinforced Armor II": "Prot II",
+  "Reinforced Armor III": "Prot III",
+  "Reinforced Armor IV": "Prot IV",
+  "Maniac Miner I": "Haste I",
+  "Maniac Miner II": "Haste II",
+  "Iron Forge": "Iron Forge",
+  "Golden Forge": "Golden Forge",
+  "Emerald Forge": "Emerald Forge",
+  "Molten Forge": "Molten Forge",
+  "Heal Pool": "Heal Pool",
+  "Dragon Buff": "Dragon Buff",
+  "It's a trap!": "Trap: It's a trap!",
+  "Counter-Offensive Trap": "Trap: Counter-Offensive",
+  "Alarm Trap": "Trap: Alarm",
+  "Miner Fatigue Trap": "Trap: Miner Fatigue",
+};
+
+export type Grouper = (g: Game) => string | string[] | null;
+
+export function groupBy(games: Game[], key: Grouper): BreakdownRow[] {
+  const by = new Map<string, Game[]>();
+  for (const g of games) {
+    const k = key(g);
+    if (k == null) continue;
+    for (const name of Array.isArray(k) ? k : [k]) {
+      if (!name) continue;
+      const list = by.get(name) ?? [];
+      list.push(g);
+      by.set(name, list);
+    }
+  }
+  return [...by.entries()]
+    .map(([name, gs]) => ({ name, agg: aggregate(gs) }))
+    .sort((a, b) => b.agg.games - a.agg.games);
+}
+
+const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+function weekday(iso: string | null): string | null {
+  if (!iso) return null;
+  const [y, m, d] = iso.split("-").map(Number);
+  if (!y || !m || !d) return null;
+  return WEEKDAYS[new Date(y, m - 1, d).getDay()];
+}
+
+function hourBucket(startTs: string | null): string | null {
+  if (!startTs) return null;
+  const h = Number(startTs.split(":")[0]);
+  if (Number.isNaN(h)) return null;
+  const label = (x: number) => `${String(x).padStart(2, "0")}:00`;
+  return `${label(h)}–${label((h + 1) % 24)}`;
+}
+
+function lengthBucket(s: number | null): string | null {
+  if (s == null) return null;
+  if (s < 180) return "Rush (<3m)";
+  if (s < 360) return "Fast (3–6m)";
+  if (s < 600) return "Medium (6–10m)";
+  return "Grind (10m+)";
+}
+
+/** Seconds from the game starting to YOUR bed falling, or null if it held.
+ * Both timestamps are time-of-day strings; the wrap handles a game that
+ * crosses midnight. */
+function bedLostAt(g: Game): number | null {
+  if (!g.your_bed_lost || !g.start_ts || !g.bed_lost_ts) return null;
+  const secs = (hms: string) => {
+    const [h, m, s] = hms.split(":").map(Number);
+    return h * 3600 + m * 60 + s;
+  };
+  const d = secs(g.bed_lost_ts) - secs(g.start_ts);
+  return d < 0 ? d + 86400 : d;
+}
+
+/** A share computed over fewer than this many team finals is noise: 1-of-2
+ * lands in a different bucket than 2-of-4 while meaning the same thing.
+ * Measured on the real corpus, the 0% and 100% rows were dominated by games
+ * with ~3 team finals and both showed ~22% win rates — an artefact of short
+ * lost games, not evidence about carrying. */
+const MIN_TEAM_FINALS = 4;
+
+/** Your share of the team's final kills. Solos has no team, so it is skipped
+ * rather than reported as a meaningless 100%. */
+function killParticipation(g: Game): string | null {
+  const team = g.team_final_kills ?? 0;
+  if (!team || !g.teammates.length) return null;   // solos / no data
+  if (team < MIN_TEAM_FINALS) return null;
+  const share = (g.your_final_kills ?? 0) / team;
+  if (share === 0) return "0% — mate did all of it";
+  if (share < 0.34) return "1–33% — supporting";
+  if (share < 0.67) return "34–66% — even split";
+  if (share < 1) return "67–99% — carrying";
+  return "100% — all of them";
+}
+
+/** How fast the team got its economy going. */
+function firstUpgradeBucket(g: Game): string | null {
+  const s = g.first_upgrade_s;
+  if (s == null) return "No upgrades bought";
+  if (s < 60) return "First upgrade <1m";
+  if (s < 120) return "First upgrade 1–2m";
+  if (s < 240) return "First upgrade 2–4m";
+  return "First upgrade 4m+";
+}
+
+/** Coarse part of the day — 24 hourly rows crossed with 7 weekdays would be
+ * 168 buckets, most of them empty. Four parts keeps it readable. */
+function dayPart(startTs: string | null): string | null {
+  if (!startTs) return null;
+  const h = Number(startTs.split(":")[0]);
+  if (Number.isNaN(h)) return null;
+  if (h < 6) return "night";
+  if (h < 12) return "morning";
+  if (h < 18) return "afternoon";
+  return "evening";
+}
+
+const DEATH_CAUSE_LABELS: Record<string, string> = {
+  void_self: "Void — you fell in",
+  void_knocked: "Void — knocked in by a player",
+  player: "Killed by a player",
+  other: "Other / unclassified",
+};
+
+/** Diamonds gate every upgrade, so how fast you got your first is upstream of
+ * the whole economy. */
+function firstDiamondBucket(g: Game): string | null {
+  const s = g.first_diamond_s;
+  if (s == null) return "No diamonds collected";
+  if (s < 60) return "First diamond <1m";
+  if (s < 120) return "First diamond 1–2m";
+  if (s < 180) return "First diamond 2–3m";
+  return "First diamond 3m+";
+}
+
+function diamondVolume(g: Game): string | null {
+  const n = g.diamond_pickups;
+  if (n == null) return null;
+  if (n === 0) return "0 diamonds";
+  if (n <= 3) return "1–3 diamonds";
+  if (n <= 6) return "4–6 diamonds";
+  return "7+ diamonds";
+}
+
+function sessionPosition(idx: number | null): string | null {
+  if (idx == null) return null;
+  if (idx < 3) return "Warmup (games 1–3)";
+  if (idx < 10) return "Mid-session (4–10)";
+  return "Fatigue (11+)";
+}
+
+/** Streak bucket for every game, based on the games BEFORE it in its session.
+ *
+ * Streak is the one dimension that isn't a pure function of a single row, so it
+ * is computed up front and stashed on a copy rather than being derived inside
+ * the grouper (which only ever sees one game).
+ */
+export function withStreakState(games: Game[]): Game[] {
+  const bySession = new Map<string, Game[]>();
+  for (const g of games) {
+    const list = bySession.get(g.session_id) ?? [];
+    list.push(g);
+    bySession.set(g.session_id, list);
+  }
+  const label = new Map<number, string>();
+  for (const list of bySession.values()) {
+    const ordered = [...list].sort((a, b) => (a.idx ?? 0) - (b.idx ?? 0));
+    let run = 0;                 // + for wins, − for losses
+    for (const g of ordered) {
+      label.set(
+        g.id,
+        run === 0 ? "First of session"
+          : run >= 2 ? "On a 2+ win streak"
+          : run === 1 ? "After a win"
+          : run <= -2 ? "After 2+ losses"
+          : "After a loss",
+      );
+      if (g.result === "WIN") run = run > 0 ? run + 1 : 1;
+      else if (g.result === "FINAL_DEATH") run = run < 0 ? run - 1 : -1;
+      // UNRESOLVED leaves the run untouched — it isn't a result either way
+    }
+  }
+  return games.map((g) => ({ ...g, _streak: label.get(g.id) ?? null }));
+}
+
+export interface BreakdownSection {
+  key: string;
+  title: string;
+  desc: string;
+  /** [log] auto-derived vs [tag] requires tagging */
+  source: "log" | "tag";
+  grouper: Grouper;
+  /** Optional pass over the whole list before grouping, for dimensions that
+   * depend on a game's NEIGHBOURS rather than only on itself. */
+  prepare?: (games: Game[]) => Game[];
+}
+
+export const SECTIONS: BreakdownSection[] = [
+  {
+    key: "maps",
+    title: "Maps",
+    desc: "Performance by map",
+    source: "log",
+    grouper: (g) => g.map,
+  },
+  {
+    key: "teammates",
+    title: "Teammates",
+    desc: "Synergy and win rates with specific players",
+    source: "log",
+    grouper: (g) => (g.teammates.length ? g.teammates : "solo-queue"),
+  },
+  {
+    key: "modes",
+    title: "Modes",
+    desc: "Solos, Doubles, Trios, Fours",
+    source: "log",
+    grouper: (g) => g.mode ?? "Unknown",
+  },
+  // REMOVED 2026-08-01: "Partied vs Solo-queue".
+  //
+  // It grouped on `teammates.length`, which in Doubles is true for a random duo
+  // mate too — so it compared "had anyone" against "had nobody" and called that
+  // premade-vs-solo. Recording real party membership (Game.party) was tried and
+  // the result is WORSE, because the data can't support the question at all:
+  // a WIN prints a summary line naming your real team, so a random mate is
+  // detected; a LOSS prints nothing, so a random mate is invisible. Measured
+  // over the real corpus, the buckets split by OUTCOME rather than by party:
+  //
+  //     premade        198W /176L   53%   (plausible)
+  //     random mate     17W /  0L  100%   (artifact)
+  //     no mate found    1W / 14L    7%   (the mirror artifact)
+  //
+  // Any version of this section reports "did you win" dressed up as "did you
+  // premade". `Game.party` is still recorded (and is now correct) for the games
+  // list; it just can't carry a breakdown.
+  {
+    key: "time",
+    title: "Time of Day",
+    desc: "Stats sliced by hour you queued",
+    source: "log",
+    grouper: (g) => hourBucket(g.start_ts),
+  },
+  {
+    key: "weekday",
+    title: "Day of Week",
+    desc: "Weekday vs weekend form",
+    source: "log",
+    grouper: (g) => weekday(g.date),
+  },
+  {
+    key: "flow",
+    title: "Game Flow",
+    desc: "How the game went — first bed, when yours fell, how long it ran",
+    source: "log",
+    // Reworked 2026-08-01. The old version's headline row was "Bed held" vs
+    // "Own bed lost", which is circular: holding your bed and winning are
+    // nearly the same event, so it reported ~100% and taught nothing. These
+    // rows all ask something the outcome doesn't already answer.
+    grouper: (g) => {
+      const out: string[] = [];
+      // Did drawing first blood matter? Unbiased — the kill feed prints for
+      // wins and losses alike.
+      out.push(g.first_bed ? "You broke the first bed" : "Someone else did");
+      // WHEN your bed fell, not whether. An early loss and a last-minute one
+      // are completely different games.
+      const lost = bedLostAt(g);
+      if (lost !== null) out.push(lost < 300 ? "Bed lost early (<5m)" : "Bed lost late (5m+)");
+      const len = lengthBucket(g.duration_s);
+      if (len) out.push(len);
+      return out;
+    },
+  },
+  {
+    key: "participation",
+    title: "Kill Participation",
+    desc: `Your share of the team's final kills — carrying vs being carried. Games with under ${MIN_TEAM_FINALS} team finals are excluded: the share is meaningless at that size.`,
+    source: "log",
+    grouper: killParticipation,
+  },
+  {
+    key: "streak",
+    title: "Streak State",
+    desc: "Do you tilt? Form after a win vs after a loss",
+    source: "log",
+    prepare: withStreakState,
+    grouper: (g) => (g as Game & { _streak?: string | null })._streak ?? null,
+  },
+  {
+    key: "daypart",
+    title: "Day & Time",
+    desc: "Weekday crossed with time of day — is Friday night your worst slot?",
+    source: "log",
+    grouper: (g) => {
+      const d = weekday(g.date);
+      const p = dayPart(g.start_ts);
+      return d && p ? `${d} ${p}` : null;
+    },
+  },
+  {
+    key: "economy",
+    title: "Early Economy",
+    desc: "How fast your team bought its first upgrade",
+    source: "log",
+    grouper: firstUpgradeBucket,
+  },
+  {
+    key: "deaths",
+    title: "How You Die",
+    desc: "Every death, not just the one that ended the game. Void vs players is all the log can tell you — death messages are cosmetics that change constantly, so a finer split would be guesswork.",
+    source: "log",
+    // A game lands in a row for EACH cause it contained, and separately in a
+    // void-exposure bucket. Grouping by "dominant cause" alone would hide the
+    // games where one bad fall decided it.
+    grouper: (g) => {
+      const causes = g.death_causes ?? {};
+      const out = Object.keys(causes)
+        .filter((c) => causes[c] > 0)
+        .map((c) => DEATH_CAUSE_LABELS[c] ?? c);
+      const voids = (causes.void_self ?? 0) + (causes.void_knocked ?? 0);
+      out.push(voids === 0 ? "No void deaths" : voids === 1 ? "1 void death" : "2+ void deaths");
+      return out;
+    },
+  },
+  {
+    key: "diamonds",
+    title: "Diamond Economy",
+    desc: "How fast and how many — diamonds gate every team upgrade",
+    source: "log",
+    grouper: (g) => {
+      const out: string[] = [];
+      const first = firstDiamondBucket(g);
+      const vol = diamondVolume(g);
+      if (first) out.push(first);
+      if (vol) out.push(vol);
+      return out;
+    },
+  },
+  {
+    key: "position",
+    title: "Session Position",
+    desc: "Warmup vs fatigue — game 1–3 vs 11+",
+    source: "log",
+    grouper: (g) => sessionPosition(g.idx),
+  },
+  {
+    key: "upgrades",
+    title: "Upgrades",
+    desc: "Every team upgrade — prot tiers, Haste, forges, traps",
+    source: "log",
+    // Was prot tier alone, which couldn't answer "does Haste win games". Every
+    // upgrade your team bought is now its own row, and a game with none lands
+    // in its own row so the with/without comparison is visible.
+    grouper: (g) => {
+      const names = (g.upgrade_names ?? []).map((n) => UPGRADE_LABELS[n] ?? n);
+      return names.length ? names : "No upgrades";
+    },
+  },
+  {
+    key: "items",
+    title: "Misc Items",
+    desc: "Do potions, pearls, KB stick, water… actually win games?",
+    source: "log",
+    grouper: (g) => {
+      const bought = Object.keys(g.items ?? {}).map(
+        (k) => ITEM_LABELS[k] ?? k,
+      );
+      // every game lands in a row, so the with/without comparison is visible
+      return bought.length ? bought : "No tracked items";
+    },
+  },
+  {
+    key: "tags",
+    title: "Tags",
+    desc: "Every tag as its own row — new tags appear automatically",
+    source: "tag",
+    grouper: (g) => (g.tags.length ? g.tags : null),
+  },
+];
+
+export function sectionByKey(key: string): BreakdownSection | undefined {
+  return SECTIONS.find((s) => s.key === key);
+}

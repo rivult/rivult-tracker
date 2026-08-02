@@ -1,0 +1,78 @@
+# Builds the released zip in public CI, from public source, and signs it with
+# a provenance attestation.
+#
+# This is the point of the workflow: "the source is open" does not prove the
+# BINARY matches it, and the binary is what people run. An attestation lets
+# anyone verify the zip they downloaded was produced by this workflow from a
+# specific commit, without reading a line of the code:
+#
+#     gh attestation verify RivultTracker-vX.Y.Z.zip --repo rivult/rivult-tracker
+#
+# Triggered by pushing a tag, e.g.  git tag v0.12.0 && git push origin v0.12.0
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run typecheck
+          npx vitest run
+          npm run build
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Backend tests
+        run: |
+          pip install pytest pyinstaller
+          python -m pytest tests/ -q
+
+      # The spec hard-fails without frontend/dist, which is deliberate - it
+      # makes "shipped a stale UI" impossible rather than merely unlikely.
+      - name: Package
+        run: python -m PyInstaller --noconfirm --clean RivultTracker.spec
+
+      - name: Verify the version resource matches the tag
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}" -replace '^v',''
+          $exe = (Get-Item "dist\RivultTracker\RivultTracker.exe").VersionInfo.ProductVersion
+          "tag=$tag  exe=$exe"
+          if ($exe -ne $tag) { throw "version_info.txt says $exe but the tag says $tag" }
+
+      - name: Stage and zip
+        shell: pwsh
+        run: |
+          Copy-Item release\README-FIRST.txt dist\RivultTracker\ -ErrorAction SilentlyContinue
+          Compress-Archive -Path dist\RivultTracker `
+            -DestinationPath "RivultTracker-${{ github.ref_name }}.zip" -CompressionLevel Optimal
+
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: RivultTracker-${{ github.ref_name }}.zip
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: RivultTracker-${{ github.ref_name }}.zip
+          generate_release_notes: true
