@@ -64,7 +64,7 @@ jobs:
       - name: Stage and zip
         shell: pwsh
         run: |
-          Copy-Item release\README-FIRST.txt dist\RivultTracker\ -ErrorAction SilentlyContinue
+          Copy-Item release\README-FIRST.txt dist\RivultTracker\   # fail loudly if missing
           Compress-Archive -Path dist\RivultTracker `
             -DestinationPath "RivultTracker-${{ github.ref_name }}.zip" -CompressionLevel Optimal
 
