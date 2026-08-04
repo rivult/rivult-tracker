@@ -119,6 +119,14 @@ export const api = {
   testOverlay: (): Promise<{ ok: boolean; error?: string }> =>
     post("/api/overlay/test"),
 
+  /** Fire /locraw + /who after a countdown, so auto-commands can be checked
+   * without starting a real game. The countdown exists to alt-tab into
+   * Minecraft: the focus gate means nothing is typed if it isn't in front. */
+  testAutoCommands: (
+    delaySeconds: number,
+  ): Promise<{ ok: boolean; error?: string; delay_s?: number }> =>
+    post(`/api/autocmd/test?delay=${encodeURIComponent(delaySeconds)}`),
+
   version: (): Promise<VersionInfo> => get("/api/version"),
 
   /** Download the newer exe and restart into it. Refused mid-game or when not

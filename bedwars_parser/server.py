@@ -593,6 +593,28 @@ def _overlay_test(app_cb: Optional[dict]) -> dict:
         return {"ok": False, "error": str(e)}
 
 
+def _autocmd_test(app_cb: Optional[dict], delay_s: Optional[float]) -> dict:
+    """Fire the fixed command pair on demand, after a countdown.
+
+    Auto-commands can otherwise only be observed by starting a real game, which
+    makes them nearly impossible to iterate on. This skips the once-per-game
+    debounce and nothing else: same fixed pair, and the focus gate still decides
+    whether anything is typed, so a test run with the wrong window in front
+    types nothing.
+    """
+    fire = (app_cb or {}).get("autocmd_test")
+    if not callable(fire):
+        return {"ok": False,
+                "error": "the tracker isn't running — auto-commands need it"}
+    try:
+        from .autocmd import TEST_DELAY_S
+        wait = TEST_DELAY_S if delay_s is None else max(0.0, min(60.0, delay_s))
+        fire(wait)
+        return {"ok": True, "delay_s": wait}
+    except Exception as e:                      # never 500 over a test button
+        return {"ok": False, "error": str(e)}
+
+
 # The sample the preview shows. A real registry tag, so the accent dot is the
 # colour the user will actually see for it.
 _PREVIEW_TAG = "sweats"
@@ -730,6 +752,14 @@ def make_handler(db_path: str, app_cb: Optional[dict] = None):
             # reports rather than appearing to do nothing.
             if u.path == "/api/overlay/test":
                 return self._json(_overlay_test(app_cb))
+            # Same indirection: the AutoCommander lives on the tracker thread.
+            if u.path == "/api/autocmd/test":
+                q = parse_qs(u.query)
+                try:
+                    d = float(q["delay"][0]) if q.get("delay") else None
+                except (TypeError, ValueError):
+                    d = None
+                return self._json(_autocmd_test(app_cb, d))
             store = Store(db_path)
             try:
                 if u.path == "/api/sync":

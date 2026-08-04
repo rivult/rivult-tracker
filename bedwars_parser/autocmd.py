@@ -55,6 +55,7 @@ DEFAULT_DELAY_S = 3.0
 # interleaved with movement keys. It is also effectively instantaneous, which
 # shrinks the window in which the player can interfere at all.
 MIN_GAP_S = 0.15               # between the two commands (chat closes on Enter)
+TEST_DELAY_S = 5.0             # Settings "Test" button: time to alt-tab into MC
 CHAT_OPEN_WAIT_S = 0.15        # let the chat GUI open before typing
 
 # NOTE on CHAT_OPEN_WAIT_S: this one is deliberately NOT minimised. If the text
@@ -267,16 +268,38 @@ class AutoCommander:
         threading.Thread(target=self._fire, daemon=True).start()
         return True
 
-    def _fire(self) -> None:
-        time.sleep(self.delay_s)
+    def test_fire(self, delay_s: Optional[float] = None) -> bool:
+        """Fire the pair once, on demand, so the user can check it works
+        without playing a game.
+
+        The ONLY guardrail this skips is the once-per-game debounce, because
+        there is no game — it is an explicit button press, not an automatic
+        trigger. The command set is the same fixed pair, and the focus gate
+        still applies at fire time, so a test with the wrong window in front
+        types nothing rather than typing into it.
+
+        The default countdown is longer than the in-game delay on purpose: the
+        user is looking at Settings when they press it and has to alt-tab into
+        Minecraft before it fires.
+        """
+        if self._send is _win_send_command and sys.platform != "win32":
+            self.last_result = "windows-only"
+            return False
+        wait = TEST_DELAY_S if delay_s is None else max(0.0, float(delay_s))
+        threading.Thread(target=self._fire, args=(wait, "test: "),
+                         daemon=True).start()
+        return True
+
+    def _fire(self, delay_s: Optional[float] = None, tag: str = "") -> None:
+        time.sleep(self.delay_s if delay_s is None else delay_s)
         if not self._focus():
-            self.last_result = "skipped: Minecraft not focused"
+            self.last_result = tag + "skipped: Minecraft not focused"
             return
         for i, cmd in enumerate(COMMANDS):
             if i:
                 time.sleep(MIN_GAP_S)
             if not self._focus():          # user tabbed out between commands
-                self.last_result = f"sent /{COMMANDS[0]} then lost focus"
+                self.last_result = tag + f"sent /{COMMANDS[0]} then lost focus"
                 return
             try:
                 # only the real sender knows about chat keys; injected doubles
@@ -288,6 +311,6 @@ class AutoCommander:
             except SendError as e:
                 # Report the refusal. Claiming success while typing nothing is
                 # exactly how the cbSize bug survived unnoticed for a release.
-                self.last_result = f"failed on /{cmd}: {e}"
+                self.last_result = tag + f"failed on /{cmd}: {e}"
                 return
-        self.last_result = "sent /" + " and /".join(COMMANDS)
+        self.last_result = tag + "sent /" + " and /".join(COMMANDS)

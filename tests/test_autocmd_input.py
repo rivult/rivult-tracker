@@ -11,9 +11,10 @@ reported success regardless.
 from __future__ import annotations
 
 import ctypes
+import time
 import unittest
 
-from bedwars_parser import autocmd
+from bedwars_parser import autocmd, server
 
 
 class InputStructTest(unittest.TestCase):
@@ -174,3 +175,72 @@ class TimingBudgetTest(unittest.TestCase):
         # walks the player. A game start is also the worst moment for frame
         # times, so this has to cover a slow frame.
         self.assertGreaterEqual(autocmd.CHAT_OPEN_WAIT_S, 0.1)
+
+
+class TestButtonTest(unittest.TestCase):
+    """The on-demand test fire (Settings -> "Test now").
+
+    Auto-commands could otherwise only be observed by starting a real game,
+    which made them nearly impossible to check after changing the chat key.
+    """
+
+    def _commander(self, focused, sent):
+        return autocmd.AutoCommander(send_fn=lambda cmd: sent.append(cmd),
+                                     focus_fn=lambda: focused, delay_s=0.0)
+
+    def test_it_types_the_same_fixed_pair(self):
+        sent = []
+        self._commander(True, sent).test_fire(0.0)
+        time.sleep(0.6)
+        self.assertEqual(sent, list(autocmd.COMMANDS))
+
+    def test_the_focus_gate_still_applies(self):
+        # A test run with the wrong window in front must type NOTHING, not type
+        # into whatever the user is actually looking at.
+        sent = []
+        c = self._commander(False, sent)
+        c.test_fire(0.0)
+        time.sleep(0.3)
+        self.assertEqual(sent, [])
+        self.assertIn("not focused", c.last_result or "")
+
+    def test_results_are_marked_as_a_test(self):
+        # so the Settings echo can't pass a test off as a real in-game send
+        sent = []
+        c = self._commander(True, sent)
+        c.test_fire(0.0)
+        time.sleep(0.6)
+        self.assertTrue((c.last_result or "").startswith("test: "))
+
+    def test_it_ignores_the_once_per_game_debounce(self):
+        # There is no game involved; pressing the button twice must fire twice.
+        sent = []
+        c = self._commander(True, sent)
+        c.test_fire(0.0)
+        time.sleep(0.6)
+        c.test_fire(0.0)
+        time.sleep(0.6)
+        self.assertEqual(sent, list(autocmd.COMMANDS) * 2)
+
+    def test_countdown_is_long_enough_to_alt_tab(self):
+        self.assertGreaterEqual(autocmd.TEST_DELAY_S, 3.0)
+
+
+class TestRouteTest(unittest.TestCase):
+    def test_it_reports_when_no_tracker_is_running(self):
+        # the dev server has no tracker thread; the UI must say so rather than
+        # appear to do nothing
+        res = server._autocmd_test(None, None)
+        self.assertFalse(res["ok"])
+        self.assertIn("tracker", res["error"])
+
+    def test_the_countdown_is_clamped(self):
+        got = []
+        cb = {"autocmd_test": got.append}
+        self.assertEqual(server._autocmd_test(cb, 999.0)["delay_s"], 60.0)
+        self.assertEqual(server._autocmd_test(cb, -5.0)["delay_s"], 0.0)
+
+    def test_no_delay_uses_the_default(self):
+        got = []
+        res = server._autocmd_test({"autocmd_test": got.append}, None)
+        self.assertEqual(res["delay_s"], autocmd.TEST_DELAY_S)

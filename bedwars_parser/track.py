@@ -235,7 +235,7 @@ def track(
         status_cb("parser changed - reprocessed stored games")
     # Auto /locraw + /who at game start (off unless enabled in Settings) —
     # restores the map/mode chat replies the client stopped sending itself.
-    from .autocmd import DEFAULT_CHAT_KEY, AutoCommander
+    from .autocmd import CHAT_KEYS, DEFAULT_CHAT_KEY, AutoCommander
     # Which key opens chat — anyone who rebound Minecraft's Open Command key
     # got nothing typed until this was configurable.
     commander = AutoCommander(
@@ -260,6 +260,10 @@ def track(
                 # lets POST /api/overlay/test show a sample from the server
                 # thread — same indirection the tray uses for /api/app/show
                 app_cb["overlay_test"] = overlay.notify
+    if app_cb is not None:
+        # lets POST /api/autocmd/test fire the pair from the server thread.
+        # Auto-commands are otherwise only observable by starting a real game.
+        app_cb["autocmd_test"] = commander.test_fire
     listener = keybind.start_listener(db_path, keymap, notify_fn=notify)
     last_press: Optional[str] = None
     last_autocmd: Optional[str] = None
@@ -341,6 +345,13 @@ def track(
             # you went back in and played. Two cheap meta reads per tick.
             if overlay is not None:
                 overlay.set_preset(_overlay_preset(store))
+            # The chat key was read ONCE at startup. It is the first thing you
+            # change when auto-commands type nothing, and the retest would have
+            # kept using the old key - the same trap keybinds had below.
+            want_key = store.get_meta("autocmd_chat_key") or DEFAULT_CHAT_KEY
+            if want_key in CHAT_KEYS and want_key != commander.chat_key:
+                commander.chat_key = want_key
+                status_cb(f"auto-commands: chat key -> {want_key}")
             # A keypress produces no in-game feedback, so publish the last one
             # for Settings to echo. Also out here: you test a new bind while
             # alt-tabbed, and gating this on log activity meant the echo stayed

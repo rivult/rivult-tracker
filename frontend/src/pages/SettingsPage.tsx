@@ -70,6 +70,13 @@ export function SettingsPage() {
   const [countedAccounts, setCountedAccounts] = useState<string[]>([]);
   const [trendWindow, setTrendWindow] = useState(DEFAULT_TREND_WINDOW);
   const [saveErr, setSaveErr] = useState<string | null>(null);
+  // Auto-command test. Local-only state on purpose: it is never persisted, so
+  // it must stay out of settingsPayload or every keystroke here would trip the
+  // autosave comparison.
+  const [autoCmdTestDelay, setAutoCmdTestDelay] = useState(5);
+  const [autoCmdTestIn, setAutoCmdTestIn] = useState<number | null>(null);
+  const [autoCmdTestErr, setAutoCmdTestErr] = useState<string | null>(null);
+  const testTimer = useRef<number | null>(null);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
   // Serialized copy of what the server currently holds. Autosave compares
   // against this instead of using a "have we loaded yet" flag: the fetch sets
@@ -116,6 +123,43 @@ export function SettingsPage() {
         );
       })
       .catch((e) => setSaveErr(String(e)));
+  }, []);
+
+  /** Fire the command pair after a visible countdown.
+   *
+   * The countdown is shown locally rather than trusted to finish silently: the
+   * whole point is knowing exactly when to be looking at Minecraft. The server
+   * runs its own timer, so this display is cosmetic — if the tab is closed
+   * mid-count the commands still fire. */
+  async function runAutoCmdTest() {
+    setAutoCmdTestErr(null);
+    try {
+      const res = await api.testAutoCommands(autoCmdTestDelay);
+      if (!res.ok) {
+        setAutoCmdTestErr(res.error ?? "could not start the test");
+        return;
+      }
+    } catch (e) {
+      setAutoCmdTestErr(String(e));
+      return;
+    }
+    let left = autoCmdTestDelay;
+    setAutoCmdTestIn(left);
+    if (testTimer.current) window.clearInterval(testTimer.current);
+    testTimer.current = window.setInterval(() => {
+      left -= 1;
+      setAutoCmdTestIn(left > 0 ? left : null);
+      if (left <= 0 && testTimer.current) {
+        window.clearInterval(testTimer.current);
+        testTimer.current = null;
+      }
+    }, 1000);
+  }
+
+  // a countdown left running after navigating away would setState on an
+  // unmounted component
+  useEffect(() => () => {
+    if (testTimer.current) window.clearInterval(testTimer.current);
   }, []);
 
   /** Autosave: debounced, so typing a log path doesn't POST once per keystroke.
@@ -271,6 +315,44 @@ export function SettingsPage() {
           anything you type in that moment goes into it, so the shorter you set the delay the
           more likely you are to be mid-keypress when it fires.
         </p>
+
+        {/* Auto-commands could otherwise only be observed by starting a real
+            game, which makes them almost impossible to check after changing
+            the chat key. The countdown is the point: it's time to alt-tab. */}
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={() => void runAutoCmdTest()}
+            disabled={autoCmdTestIn !== null}
+            className="rounded-md border border-border px-3 py-1.5 text-sm text-foreground transition-colors hover:bg-muted/50 disabled:opacity-60"
+          >
+            {autoCmdTestIn === null
+              ? "Test now"
+              : `typing in ${autoCmdTestIn}s — switch to Minecraft`}
+          </button>
+          <label className="flex items-center gap-2 text-xs text-muted-foreground">
+            countdown
+            <input
+              type="number"
+              min={1}
+              max={30}
+              step={1}
+              value={autoCmdTestDelay}
+              onChange={(e) =>
+                setAutoCmdTestDelay(
+                  Math.min(30, Math.max(1, Math.round(Number(e.target.value) || 5))),
+                )
+              }
+              className="w-16 rounded-md border border-border bg-background px-2 py-1 text-sm text-foreground outline-none"
+            />
+            s
+          </label>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Types the same two commands right now, after a countdown long enough to alt-tab. It
+          still refuses unless Minecraft is the focused window, so nothing lands in another app
+          — the result appears below either way.
+        </p>
+        {autoCmdTestErr && <p className="text-xs text-danger">{autoCmdTestErr}</p>}
         <p className="text-xs text-muted-foreground">
           Set the chat key to whatever you actually have bound in Minecraft
           (Options → Controls). The default &apos;/&apos; is the “Open Command” bind, which opens
@@ -284,9 +366,11 @@ export function SettingsPage() {
           <div
             className={cn(
               "text-xs",
-              settings.autocmd_last.startsWith("sent")
+              // results from the Test button are prefixed "test: ", so match
+              // on the outcome word rather than the start of the string
+              /(^|: )sent/.test(settings.autocmd_last)
                 ? "text-success"
-                : settings.autocmd_last.startsWith("failed")
+                : /(^|: )failed/.test(settings.autocmd_last)
                   ? "text-danger"
                   : "text-muted-foreground",
             )}
