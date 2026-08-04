@@ -266,6 +266,12 @@ export function SettingsPage() {
           your own discretion.
         </p>
         <p className="text-xs text-muted-foreground">
+          The delay above is the only wait — once it elapses both commands are typed in under
+          half a second. Your chat box is open for about a tenth of a second each time, and
+          anything you type in that moment goes into it, so the shorter you set the delay the
+          more likely you are to be mid-keypress when it fires.
+        </p>
+        <p className="text-xs text-muted-foreground">
           Set the chat key to whatever you actually have bound in Minecraft
           (Options → Controls). The default &apos;/&apos; is the “Open Command” bind, which opens
           chat with the slash already typed; any other key opens chat empty and the tracker types

@@ -35,9 +35,34 @@ from typing import Callable, Optional
 
 COMMANDS = ("locraw", "who")   # typed as "/<cmd>" + Enter; FIXED — see above
 DEFAULT_DELAY_S = 3.0
-MIN_GAP_S = 1.2                # between the two commands
-KEY_GAP_S = 0.02               # between keystrokes
+
+# TIMING — why these are what they are (user, 2026-08-04: "they need to be like
+# instant ... almost no chance of me messing it up/stopping me").
+#
+# The whole sequence used to take ~2.0s after the delay: 1.2s of that was the
+# gap between the two commands, and the rest was a 20ms sleep after EVERY key
+# press and release, one SendInput call each.
+#
+# Both halves of that were also the reason letters went missing. While the chat
+# box is open, every key the player presses is typed INTO it — so a stray W or
+# A corrupts the command, and a stray Enter sends it half-finished. Two seconds
+# of exposure at the start of a game, which is exactly when the player is
+# sprinting off spawn, is a lot of chances to clobber it.
+#
+# The fix is to type each command as ONE SendInput call. Win32 guarantees a
+# single call's events are inserted into the input stream contiguously and are
+# never interspersed with the user's own input, so the command can no longer be
+# interleaved with movement keys. It is also effectively instantaneous, which
+# shrinks the window in which the player can interfere at all.
+MIN_GAP_S = 0.15               # between the two commands (chat closes on Enter)
 CHAT_OPEN_WAIT_S = 0.15        # let the chat GUI open before typing
+
+# NOTE on CHAT_OPEN_WAIT_S: this one is deliberately NOT minimised. If the text
+# arrives before the chat box is up, it goes to the GAME instead — and "locraw"
+# contains A and W, so a too-short wait makes the player strafe and walk. A
+# game start is also the worst moment for frame times (chunk loading), so the
+# wait has to cover a slow frame, not a typical one. 150ms is ~9 frames at
+# 60fps and still leaves the total under half a second.
 
 # Set-1 (US) scancodes for exactly the characters the two commands need.
 # DO NOT widen this: it is the alphabet of everything this module can type,
@@ -160,6 +185,38 @@ def key_sequence(cmd: str, chat_key: str = DEFAULT_CHAT_KEY) -> tuple:
     return opener, rest
 
 
+def _send_scans(user32, scans) -> None:
+    """Press and release every scancode in ONE SendInput call.
+
+    Atomicity is the point, not just speed. From the SendInput docs: the events
+    of a single call "are not interspersed with other keyboard or mouse input
+    events inserted either by the user ... or by other calls to SendInput". A
+    per-key loop gives the player's own keystrokes room to land in the middle
+    of the command; a single call does not.
+
+    Each scancode becomes two events (down, up) with no gap between them. The
+    chat box reads LWJGL's buffered key events rather than polling key state,
+    so a zero-duration press still registers as a typed character.
+    """
+    n = len(scans) * 2
+    if not n:
+        return
+    arr = (INPUT * n)()
+    i = 0
+    for scan in scans:
+        for flags in (KEYEVENTF_SCANCODE,
+                      KEYEVENTF_SCANCODE | KEYEVENTF_KEYUP):
+            arr[i] = INPUT(type=INPUT_KEYBOARD)
+            arr[i].ki = KEYBDINPUT(0, scan, flags, 0, 0)
+            i += 1
+    sent = user32.SendInput(n, arr, ctypes.sizeof(INPUT))
+    if sent != n:
+        # A partial send is still a failure: half a command in the chat box is
+        # worse than none, and reporting success would hide it.
+        raise SendError(f"SendInput accepted {sent} of {n} events "
+                        f"(error {ctypes.GetLastError()})")
+
+
 def _win_send_command(cmd: str, chat_key: str = DEFAULT_CHAT_KEY) -> None:
     """Open chat, type the command, press Enter — scancodes only.
 
@@ -172,22 +229,10 @@ def _win_send_command(cmd: str, chat_key: str = DEFAULT_CHAT_KEY) -> None:
     can't be reported to the user as a successful send.
     """
     user32 = _user32()
-
-    def tap(scan: int) -> None:
-        for flags in (KEYEVENTF_SCANCODE, KEYEVENTF_SCANCODE | KEYEVENTF_KEYUP):
-            inp = INPUT(type=INPUT_KEYBOARD)
-            inp.ki = KEYBDINPUT(0, scan, flags, 0, 0)
-            sent = user32.SendInput(1, ctypes.byref(inp), ctypes.sizeof(INPUT))
-            if sent != 1:
-                raise SendError("SendInput refused the keystroke "
-                                f"(error {ctypes.GetLastError()})")
-            time.sleep(KEY_GAP_S)
-
     opener, rest = key_sequence(cmd, chat_key)
-    tap(opener)
+    _send_scans(user32, [opener])
     time.sleep(CHAT_OPEN_WAIT_S)       # let the chat box appear before typing
-    for scan in rest:
-        tap(scan)
+    _send_scans(user32, rest)          # one atomic burst — see TIMING above
 
 
 class AutoCommander:

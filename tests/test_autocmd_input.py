@@ -90,3 +90,87 @@ class SendFailureReportingTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AtomicTypingTest(unittest.TestCase):
+    """Each command must go in ONE SendInput call.
+
+    THE BUG THIS CATCHES: typing key-by-key, with a 20ms sleep after every
+    press and release, left the chat box open for ~2s per game. Every key the
+    player pressed in that window was typed into the box, so commands arrived
+    corrupted or cut short by a stray Enter. Win32 only guarantees that the
+    events of a SINGLE call are never interspersed with the user's own input,
+    so "one call per command" is a correctness property, not an optimisation.
+    """
+
+    class FakeUser32:
+        def __init__(self, accept_all=True):
+            self.calls = []          # (count, [(scan, flags), ...])
+            self.accept_all = accept_all
+
+        def SendInput(self, n, arr, cbsize):
+            self.calls.append((n, [(arr[i].ki.wScan, arr[i].ki.dwFlags)
+                                   for i in range(n)]))
+            return n if self.accept_all else 0
+
+    def test_one_call_carries_the_whole_command(self):
+        u = self.FakeUser32()
+        scans = [0x26, 0x18, 0x2E]           # l, o, c
+        autocmd._send_scans(u, scans)
+        self.assertEqual(len(u.calls), 1, "must be a single SendInput call")
+        n, events = u.calls[0]
+        self.assertEqual(n, len(scans) * 2, "one down + one up per key")
+
+    def test_every_key_is_pressed_and_released_in_order(self):
+        u = self.FakeUser32()
+        autocmd._send_scans(u, [0x26, 0x18])
+        _, events = u.calls[0]
+        down = autocmd.KEYEVENTF_SCANCODE
+        up = autocmd.KEYEVENTF_SCANCODE | autocmd.KEYEVENTF_KEYUP
+        self.assertEqual(events, [(0x26, down), (0x26, up),
+                                  (0x18, down), (0x18, up)])
+
+    def test_a_partial_send_is_an_error_not_a_success(self):
+        # Half a command in the chat box is worse than none.
+        u = self.FakeUser32(accept_all=False)
+        with self.assertRaises(autocmd.SendError):
+            autocmd._send_scans(u, [0x26, 0x18])
+
+    def test_empty_sequence_sends_nothing(self):
+        u = self.FakeUser32()
+        autocmd._send_scans(u, [])
+        self.assertEqual(u.calls, [])
+
+    def test_a_command_is_two_calls_opener_then_burst(self):
+        # The opener has to land before the text, or the text goes to the GAME
+        # instead of the chat box - and "locraw" contains A and W.
+        u = self.FakeUser32()
+        real = autocmd._user32
+        autocmd._user32 = lambda: u
+        try:
+            autocmd._win_send_command("who", "/")
+        finally:
+            autocmd._user32 = real
+        self.assertEqual(len(u.calls), 2, "opener, then one burst for the text")
+        self.assertEqual(u.calls[0][0], 2, "opener is a single key")
+        # "/" opener already types the slash, so the burst is w,h,o + Enter
+        self.assertEqual(u.calls[1][0], 4 * 2)
+
+
+class TimingBudgetTest(unittest.TestCase):
+    """The sequence has to finish promptly after the user's delay.
+
+    User, 2026-08-04: "they need to be like instant ... sometimes you have to
+    rush asap". The old constants totalled ~2.0s of typing after the delay.
+    """
+
+    def test_total_typing_time_stays_under_half_a_second(self):
+        # two commands: (chat-open wait + instant burst) x2, plus one gap
+        total = autocmd.CHAT_OPEN_WAIT_S * 2 + autocmd.MIN_GAP_S
+        self.assertLess(total, 0.5, f"typing budget regressed to {total:.2f}s")
+
+    def test_chat_open_wait_is_not_shaved_to_nothing(self):
+        # Too short and the text lands in the game, where "locraw" strafes and
+        # walks the player. A game start is also the worst moment for frame
+        # times, so this has to cover a slow frame.
+        self.assertGreaterEqual(autocmd.CHAT_OPEN_WAIT_S, 0.1)
