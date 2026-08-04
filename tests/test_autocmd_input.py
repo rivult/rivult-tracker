@@ -165,10 +165,16 @@ class TimingBudgetTest(unittest.TestCase):
     rush asap". The old constants totalled ~2.0s of typing after the delay.
     """
 
-    def test_total_typing_time_stays_under_half_a_second(self):
+    def test_total_typing_time_stays_well_under_half_a_second(self):
         # two commands: (chat-open wait + instant burst) x2, plus one gap
         total = autocmd.CHAT_OPEN_WAIT_S * 2 + autocmd.MIN_GAP_S
-        self.assertLess(total, 0.5, f"typing budget regressed to {total:.2f}s")
+        self.assertLess(total, 0.4, f"typing budget regressed to {total:.2f}s")
+
+    def test_the_inter_command_gap_is_not_zero(self):
+        # It can be short because both outcomes of being early still send the
+        # command (see the comment on MIN_GAP_S), but zero would mean the
+        # opener races Enter in the same input batch with nothing in between.
+        self.assertGreater(autocmd.MIN_GAP_S, 0.0)
 
     def test_chat_open_wait_is_not_shaved_to_nothing(self):
         # Too short and the text lands in the game, where "locraw" strafes and

@@ -54,7 +54,15 @@ DEFAULT_DELAY_S = 3.0
 # never interspersed with the user's own input, so the command can no longer be
 # interleaved with movement keys. It is also effectively instantaneous, which
 # shrinks the window in which the player can interfere at all.
-MIN_GAP_S = 0.15               # between the two commands (chat closes on Enter)
+# Between the two commands. Safe to keep short, and the reason is an asymmetry
+# worth spelling out: the chat box has just been CLOSED by Enter, so the two
+# outcomes of cutting this too fine both end well.
+#   - close already processed -> the "/" opens chat, as intended.
+#   - close NOT yet processed -> the "/" is typed into the box, which Enter
+#     just emptied, so "who" appends to it and Enter still sends "/who".
+# Either way the command lands. Contrast CHAT_OPEN_WAIT_S below, where being
+# early sends letters to the GAME instead — which is why that one stays put.
+MIN_GAP_S = 0.05
 TEST_DELAY_S = 5.0             # Settings "Test" button: time to alt-tab into MC
 CHAT_OPEN_WAIT_S = 0.15        # let the chat GUI open before typing
 
