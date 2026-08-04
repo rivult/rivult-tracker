@@ -241,11 +241,11 @@ class TestPartySummonLine(unittest.TestCase):
         from bedwars_parser.classify import classify_lines
         from bedwars_parser.events import Kind
         line = ("[22:05:07] [Client thread/INFO]: [CHAT] Party Members: "
-                "[VIP] rivult ● [MVP+] Subtrance ●")
+                "[VIP] rivult ● [MVP+] j7zltYogM ●")
         events = classify_lines([line], "rivult")
         party = [e for e in events if e.kind is Kind.PARTY]
         self.assertEqual(len(party), 1)
-        self.assertEqual(sorted(party[0].players), ["Subtrance", "rivult"])
+        self.assertEqual(sorted(party[0].players), ["j7zltYogM", "rivult"])
 
 
 class TestAutoCommander(unittest.TestCase):

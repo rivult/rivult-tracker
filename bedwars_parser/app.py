@@ -8,7 +8,8 @@ runs.
 
     python -m bedwars_parser.app [log] [--db bedwars.db]
 
-Ship note: bundle to a single .exe with ``build.bat`` (PyInstaller). The exe is
+Ship note: packaged with PyInstaller via ``RivultTracker.spec`` (onedir, NOT
+single-file - see the antivirus notes in the README). The exe is
 unsigned, so Windows SmartScreen will warn on first run — code signing is a
 manual, paid step (see README), not something this build does.
 """

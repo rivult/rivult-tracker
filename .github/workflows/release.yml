@@ -40,18 +40,27 @@ jobs:
           npx vitest run
           npm run build
 
+      # Pinned to the interpreter the releases are built against. A different
+      # minor version changes which stdlib extensions PyInstaller bundles, so
+      # this is not cosmetic.
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: '3.14'
+      - name: Install dependencies
+        run: pip install -r requirements.txt
       - name: Backend tests
-        run: |
-          pip install pytest pyinstaller
-          python -m pytest tests/ -q
+        run: python -m pytest tests/ -q
 
       # The spec hard-fails without frontend/dist, which is deliberate - it
       # makes "shipped a stale UI" impossible rather than merely unlikely.
       - name: Package
         run: python -m PyInstaller --noconfirm --clean RivultTracker.spec
+
+      # v0.12.0 shipped without pywebview: it built, ran, served the dashboard
+      # and passed every test, but opened a browser tab instead of the native
+      # window. Nothing in the pipeline noticed. This is what notices.
+      - name: Verify the bundle isn't missing anything silent
+        run: python tools/verify_bundle.py dist/RivultTracker
 
       - name: Verify the version resource matches the tag
         shell: pwsh

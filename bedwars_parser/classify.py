@@ -151,11 +151,11 @@ def self_signal(msg: str) -> Optional[str]:
 _LOCRAW = re.compile(r'^\{"server":.*\}$')
 
 # Party system lines (confirmed against real logs):
-#   You have joined [MVP+] Subtrance's party!
-#   [MVP+] Subtrance joined the party.
-#   [VIP] NightRangerX left the party.
+#   You have joined [MVP+] j7zltYogM's party!
+#   [MVP+] j7zltYogM joined the party.
+#   [VIP] q9moKcHmCqse left the party.
 #   You left the party.  /  ... has disbanded the party!
-#   Party Members: [VIP] rivult ● [MVP+] Subtrance ●
+#   Party Members: [VIP] rivult ● [MVP+] j7zltYogM ●
 _P_JOIN_YOU = re.compile(rf"^You have joined (?:\[[^\]]*\]\s*)?({_IGN})'s party!")
 _P_JOIN = re.compile(rf"^(?:\[[^\]]*\]\s*)?({_IGN}) joined the party\.")
 _P_LEAVE = re.compile(rf"^(?:\[[^\]]*\]\s*)?({_IGN}) (?:left the party|has left the party|has been removed from the party)")

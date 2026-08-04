@@ -12,10 +12,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
-      # The parser has zero runtime dependencies on purpose - pytest is the
-      # only thing to install, and that is a dev dependency.
-      - run: pip install pytest
+          python-version: '3.14'
+      - run: pip install -r requirements.txt
       - run: python -m pytest tests/ -q
 
   frontend:

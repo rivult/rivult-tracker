@@ -19,8 +19,8 @@ Numbered `Pn` sections are design decisions in the order they were made.
     `sqlite3`, `urllib`). No pip runtime dependencies. Package:
     `bedwars_parser/`. SQLite in WAL mode, one short-lived connection per
     HTTP request, `busy_timeout=5000`.
-  - **SaaS backend**: Cloudflare Worker in `../bedwars-cloud` (Hono + D1 +
-    Stripe). The browser NEVER talks to it directly — the local Python
+  - **SaaS backend**: a separate PRIVATE service, not in this repository.
+    The browser NEVER talks to it directly — the local Python
     server proxies under `/api/cloud/*` and keeps the auth token in the
     local DB (`meta` table). Wire envelope: `{ok, data, error:{code,message}}`.
 - Component isolation: frontend components are purely functional, export
@@ -50,8 +50,8 @@ bedwars-parser/
   tests/                  # pytest suite (77 tests) — parser + store + sync
   bedwars.db              # the user's real local DB (do not touch in dev;
                           #  use a sqlite backup copy)
-  run.bat / dev.bat / build.bat / RivultTracker.spec
-../bedwars-cloud/         # Cloudflare Worker (Hono routes, D1 migrations)
+  run.bat / dev.bat / RivultTracker.spec / requirements.txt
+(the paid cloud layer lives in a separate private repository)
 ```
 
 ## Local Database Schema (SQLite — `bedwars_parser/db.py::_SCHEMA`)
@@ -263,24 +263,12 @@ traversal-safe, explicit MIME table because Windows registry lies about .js).
   served, so the scan would never advance and two app copies would share a
   port. Covered by `tests/test_backend_additions.py::BindServerTest`.
 
-## Cloud (SaaS) — `../bedwars-cloud`
+## Cloud / paid tier
 
-- Hono Worker; envelope `{ok, data, error}`. Auth: Bearer token (session
-  table, hashed), device headers `X-Device-Id/-Name/-Platform`.
-- D1 tables (migrations/0001_init.sql): `users` (mirrors Stripe:
-  sub_status/plan/period_end/cancel_at_period_end + sync_seq + lockout),
-  `sessions`, `devices` (soft-revoked, UNIQUE(user_id, device_id), limit per
-  user), `password_resets`, `stripe_events`, `rate_limits`, `games`
-  (local games+game_stats flattened 1:1, keyed (user_id, game_key),
-  row_version for keyset pull pagination), `tags`, `game_tags`.
-- License: derived from `sub_status` alone — active|trialing|past_due →
-  'active'; 'free' stays free; else 'expired'. Desktop caches it with a
-  5-day offline grace (`sync.py::license_status`).
-- SyncEngine contract (sync.py docstring is authoritative): content-hash
-  change detection; a device only pushes games it parsed (has raw_lines);
-  tags sync for every game; tombstones via pushed_tags snapshots; pull
-  cursor only advances from pull responses; foreign tag rows for not-yet-
-  arrived games are staged in `sync_pending_tags`.
+The optional cloud sync and licensing layer is a **separate, private
+component** and is not part of this repository. Nothing in the code here
+requires it: `sync.py` and `cloudapi.py` are inert unless a user explicitly
+enables sync, and the public build ships with it off.
 
 ## Frontend (`frontend/src`)
 
@@ -337,7 +325,7 @@ tooltip bg #18181b.
   the live tracker can never fight (idempotent keys).
 - Auth/license state flows: Worker → `cloudapi.py` → `sync.py` helpers →
   `server.py /api/cloud/*` → `api/client.ts` → `AccountPage` + DataContext
-  `premium`. Payments: Stripe webhooks → Worker `routes/billing.ts` →
+  `premium`. Payments are handled entirely by the private backend →
   `users` mirror columns → license endpoint.
 
 ## Planned Features (designed, NOT yet implemented)
@@ -347,33 +335,6 @@ schema improvisation. NO SQLite triggers are used anywhere in this project
 (idempotent upserts + ON DELETE CASCADE cover every case a trigger would);
 none of the designs below introduces one — if you think you need a trigger,
 stop and escalate.
-
-### P1 — Server-enforced paywall — ✅ IMPLEMENTED (2026-07-20), OFF by default
-- `server._is_premium(store)` reads the cached `cloud_license` via
-  `sync.license_status` (5-day grace); never raises — unreadable = not premium.
-- `server._free_tier_filters(store, f) -> (filters, clamped)` returns a NEW
-  filter dict with `date_from` pushed to today − `FREE_HISTORY_DAYS` (90); a
-  tighter user filter wins. `/api/dashboard` adds `"clamped": true` when it
-  narrowed the window (additive, backward compatible).
-- **`server.PAYWALL_ENABLED` is the master switch and must stay in lockstep
-  with `DataContext.PAYWALL_ENABLED`.** Both are False: with no Worker
-  deployed every license check fails → "not premium", so turning either on
-  would clamp the owner's own dashboard with no way to buy out of it.
-  SETUP.txt part 6 flips them at the right moment.
-
-### P2 — Stripe checkout from the app — ✅ IMPLEMENTED (2026-07-20)
-- `cloudapi.checkout(plan)` / `cloudapi.portal()` → Worker `/api/billing/*`.
-- Local proxies `POST /api/cloud/billing/checkout` (body `{plan}`, validated
-  against monthly|annual BEFORE any network call) and
-  `/api/cloud/billing/portal`, both → `{ok, url}` or `{error, code}`; both
-  require a stored token (`UNAUTHENTICATED` otherwise). No schema change.
-- `components/UpgradeCard.tsx`: `UpgradeCard` (license != active, one button
-  per plan) and `ManageBillingRow` (license == active → Stripe's portal).
-  Both `window.open` the returned URL — card details never enter this app.
-  Error copy mapped per code (`NETWORK`, `UNAUTHENTICATED`, `NO_CUSTOMER`).
-- Verified against a locally-running Worker: register→token, portal
-  (`NO_CUSTOMER`), bad plan (`INPUT`), signed out (`UNAUTHENTICATED`).
-  Checkout itself needs a real Stripe test key.
 
 ### P3 — Global keybind tagging — ✅ IMPLEMENTED (`keybind.py`, 2026-07-19;
 ### game-resolution rule + toggle + overlay added 2026-07-20)
@@ -596,13 +557,6 @@ touching it — several of the choices below are scar tissue.**
 - Frontend (executor T7): Settings "Maintenance" card — button disabled
   while running, "takes a minute or two" note, result summary, and the
   honest caveat: games whose logs never contained locraw can't get maps.
-
-### P9 — SaaS deployment — runbook lives in `bedwars-cloud/DEPLOY.md`
-  (executor T9 transcribes it; steps: wrangler login → d1 create + paste id
-  → migrate:remote → 4 secrets → Stripe product w/ two prices + portal →
-  deploy → route api.rivult.net/* → webhook w/ pinned API version → Resend
-  domain). Desktop app needs NO config: `cloud_api_base` already defaults
-  to https://api.rivult.net.
 
 ### P11 — Auto /locraw + /who — ✅ core IMPLEMENTED; Settings card = executor
 - Why (ROOT CAUSE, confirmed by the user 2026-07-19): a third-party

@@ -78,7 +78,7 @@ class TestCrossChecks(unittest.TestCase):
 
     def test_final_kills_expose_one_suppressed_reward(self):
         s = self.r.stats
-        # 24 real final kills; one (praddybraddy, L831) emitted a token reward
+        # 24 real final kills; one (MBSYZ48tfZlT, L831) emitted a token reward
         # but no Slumber-ticket line, so the reward count trails by exactly one.
         self.assertEqual(s.your_final_kills, 24)
         self.assertEqual(s.reward_final_kills, 23)
@@ -106,7 +106,7 @@ class TestRoster(unittest.TestCase):
         # These three were seated before rivult joined, so they have no
         # "has joined" line — only /who and the kill feed reveal them.
         roster = build_roster(self.raw, "rivult")
-        for name in ("kachiggz", "Frozen_Tommy", "Max444"):
+        for name in ("Qg3ZTapR", "I9ONI6njnNKc", "KVvJxt"):
             self.assertIn(name, roster)
 
     def test_seven_who_lines_one_per_game(self):
@@ -118,8 +118,8 @@ class TestRoster(unittest.TestCase):
 class TestClassifierTraps(unittest.TestCase):
     """Unit tests for the file-format and parsing traps in reference §1–§5."""
 
-    def _one(self, line, you="rivult", roster=("rivult", "Frozen_Tommy",
-                                               "Max444", "rivult2")):
+    def _one(self, line, you="rivult", roster=("rivult", "I9ONI6njnNKc",
+                                               "KVvJxt", "rivult2")):
         from bedwars_parser.classify import _classify_one, _roster_regex
         msg = strip_colors(line)
         return _classify_one(1, "17:00:00", line, msg, you,
@@ -137,20 +137,20 @@ class TestClassifierTraps(unittest.TestCase):
 
     def test_player_chat_excluded_before_roster_scan(self):
         # A player typing another player's name must not fabricate a kill.
-        ev = self._one("[VIP+] rivult: Frozen_Tommy is cheating")
+        ev = self._one("[VIP+] rivult: I9ONI6njnNKc is cheating")
         self.assertEqual(ev.kind, Kind.CHAT)
 
     def test_killstreak_frame(self):
-        ev = self._one("Max444 was rivult's final #11,125. FINAL KILL!")
+        ev = self._one("KVvJxt was rivult's final #11,125. FINAL KILL!")
         self.assertEqual(ev.kind, Kind.KILL)
-        self.assertEqual(ev.victim, "Max444")
+        self.assertEqual(ev.victim, "KVvJxt")
         self.assertEqual(ev.killer, "rivult")
         self.assertTrue(ev.final)
 
     def test_your_final_death_frame(self):
-        ev = self._one("rivult was charged by Frozen_Tommy. FINAL KILL!")
+        ev = self._one("rivult was charged by I9ONI6njnNKc. FINAL KILL!")
         self.assertEqual(ev.victim, "rivult")
-        self.assertEqual(ev.killer, "Frozen_Tommy")
+        self.assertEqual(ev.killer, "I9ONI6njnNKc")
         self.assertTrue(ev.final)
 
     def test_environmental_death_has_no_killer(self):
@@ -169,9 +169,9 @@ class TestClassifierTraps(unittest.TestCase):
 
     def test_ign_substring_collision_longest_match(self):
         # "rivult2" must win over "rivult" at the same position.
-        ev = self._one("rivult2 was killed by Max444.")
+        ev = self._one("rivult2 was killed by KVvJxt.")
         self.assertEqual(ev.victim, "rivult2")
-        self.assertEqual(ev.killer, "Max444")
+        self.assertEqual(ev.killer, "KVvJxt")
 
 
 class TestStorage(unittest.TestCase):
@@ -453,7 +453,7 @@ class TestHardening(unittest.TestCase):
         r = parse_log(FIXTURE)
         # On wins the placement line names your team; you duo'd this session.
         mates = {m for g in r.games for m in g.teammates}
-        self.assertIn("falton", mates)
+        self.assertIn("gdJ9lh", mates)
         self.assertTrue(any(g.party for g in r.games))
 
     def test_noise_shrinks_unparsed_without_eating_kills(self):
@@ -492,8 +492,8 @@ class TestRoundTwo(unittest.TestCase):
     def test_summary_names_skips_bare_trailing_rank(self):
         from bedwars_parser.classify import _summary_names
         # the truncated 4v4 line that used to yield "MVP"
-        out = _summary_names("[VIP] rivult, [MVP+] Subtrance, [MVP+] iAnglix, [MVP+]")
-        self.assertEqual(out, ["rivult", "Subtrance", "iAnglix"])
+        out = _summary_names("[VIP] rivult, [MVP+] j7zltYogM, [MVP+] qUFk4iL, [MVP+]")
+        self.assertEqual(out, ["rivult", "j7zltYogM", "qUFk4iL"])
         self.assertNotIn("MVP", out)
 
     def test_identity_from_gameplay_not_login_name(self):

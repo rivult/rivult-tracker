@@ -6,13 +6,13 @@
 
 /** Cloud account / sync / billing UI (the Account page).
  *
- * FALSE for the closed-source beta: the Cloudflare Worker behind it is not
- * deployed, so every one of those screens can only show a network error, and
- * a page that always errors reads as "this app is broken" — worse than the
- * feature simply not existing yet.
+ * FALSE in this build: the backend service behind it is not deployed, so every
+ * one of those screens can only show a network error, and a page that always
+ * errors reads as "this app is broken" — worse than the feature simply not
+ * existing yet.
  *
- * The plumbing underneath is complete and tested (see ROADMAP Track B); when
- * the Worker goes live, flip this to true. Keep in mind the separate
+ * The plumbing underneath is complete and tested; when the service goes live,
+ * flip this to true. Keep in mind the separate
  * `PAYWALL_ENABLED` switches in `state/DataContext.tsx` and
  * `bedwars_parser/server.py` — those gate premium LOCKS, this gates the
  * account UI. Turning the paywall on while this is false would lock features

@@ -1,4 +1,4 @@
-"""PyInstaller entry point — bundles to a onedir folder (see build.bat).
+"""PyInstaller entry point — bundles to a onedir folder (see RivultTracker.spec).
 
 The working directory is the DATA directory, not the app folder. Two reasons:
 an update replaces the app folder wholesale, so anything written there is
