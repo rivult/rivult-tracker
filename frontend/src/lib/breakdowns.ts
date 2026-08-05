@@ -372,10 +372,33 @@ export function withStreakState(games: Game[]): Game[] {
   return games.map((g) => ({ ...g, _streak: label.get(g.id) ?? null }));
 }
 
+/** Hub groupings, in display order.
+ *
+ * Eighteen sections in one flat grid is a wall — nothing tells you where to
+ * start or which questions are related. These four bands are ordered by how
+ * directly you can act on them: WHEN you play is a decision you make before
+ * queueing, what you BUY is one you make mid-game, and how games GO is mostly
+ * a description of what happened.
+ */
+export const GROUPS = [
+  { key: "when", title: "When you play",
+    blurb: "Decided before you queue — the rows here can't be an artefact of how the game went." },
+  { key: "where", title: "Where and who with",
+    blurb: "Map, mode and the people next to you." },
+  { key: "buy", title: "What you buy",
+    blurb: "Economy and items. Restricted to comparable-length games, or they just measure surviving." },
+  { key: "how", title: "How games go",
+    blurb: "The shape of a game. Read these as description rather than advice." },
+  { key: "yours", title: "Your own labels", blurb: "Built from tags you apply." },
+] as const;
+
+export type GroupKey = (typeof GROUPS)[number]["key"];
+
 export interface BreakdownSection {
   key: string;
   title: string;
   desc: string;
+  group: GroupKey;
   /** [log] auto-derived vs [tag] requires tagging */
   source: "log" | "tag";
   grouper: Grouper;
@@ -387,6 +410,7 @@ export interface BreakdownSection {
 export const SECTIONS: BreakdownSection[] = [
   {
     key: "maps",
+    group: "where",
     title: "Maps",
     desc: "Performance by map",
     source: "log",
@@ -394,6 +418,7 @@ export const SECTIONS: BreakdownSection[] = [
   },
   {
     key: "teammates",
+    group: "where",
     title: "Teammates",
     desc: "Synergy and win rates with specific players",
     source: "log",
@@ -401,6 +426,7 @@ export const SECTIONS: BreakdownSection[] = [
   },
   {
     key: "modes",
+    group: "where",
     title: "Modes",
     desc: "Solos, Doubles, Trios, Fours",
     source: "log",
@@ -425,6 +451,7 @@ export const SECTIONS: BreakdownSection[] = [
   // list; it just can't carry a breakdown.
   {
     key: "time",
+    group: "when",
     title: "Time of Day",
     desc: "Stats sliced by hour you queued",
     source: "log",
@@ -432,6 +459,7 @@ export const SECTIONS: BreakdownSection[] = [
   },
   {
     key: "weekday",
+    group: "when",
     title: "Day of Week",
     desc: "Weekday vs weekend form",
     source: "log",
@@ -439,6 +467,7 @@ export const SECTIONS: BreakdownSection[] = [
   },
   {
     key: "flow",
+    group: "how",
     title: "Game Flow",
     desc: "How the game went — who broke the first bed, and whether yours fell early or late",
     source: "log",
@@ -460,6 +489,7 @@ export const SECTIONS: BreakdownSection[] = [
   },
   {
     key: "length",
+    group: "how",
     title: "Game Length",
     desc: "How long games ran. This is CONTEXT, not a lever — a game is long because it was close, so the win rate here mostly restates that. It is here because game length drives several other sections and it helps to see its shape directly.",
     source: "log",
@@ -472,6 +502,7 @@ export const SECTIONS: BreakdownSection[] = [
   },
   {
     key: "participation",
+    group: "how",
     title: "Kill Participation",
     desc: "Your share of the team's final kills — carrying vs being carried. Only games that ran 6+ minutes, so the split isn't decided by a game ending before anyone got going. Those games are won more often than average, so read the rows against each other rather than against your overall win rate.",
     source: "log",
@@ -479,6 +510,7 @@ export const SECTIONS: BreakdownSection[] = [
   },
   {
     key: "streak",
+    group: "when",
     title: "Streak State",
     desc: "Do you tilt? Form after a win vs after a loss",
     source: "log",
@@ -487,6 +519,7 @@ export const SECTIONS: BreakdownSection[] = [
   },
   {
     key: "daypart",
+    group: "when",
     title: "Day & Time",
     desc: "Weekday crossed with time of day — is Friday night your worst slot?",
     source: "log",
@@ -498,6 +531,7 @@ export const SECTIONS: BreakdownSection[] = [
   },
   {
     key: "economy",
+    group: "buy",
     title: "Early Economy",
     desc: "How fast your team bought its first upgrade",
     source: "log",
@@ -505,6 +539,7 @@ export const SECTIONS: BreakdownSection[] = [
   },
   {
     key: "deaths",
+    group: "how",
     title: "How You Die",
     desc: "Every death, not just the one that ended the game. Void vs players is all the log can tell you — death messages are cosmetics that change constantly, so a finer split would be guesswork.",
     source: "log",
@@ -537,6 +572,7 @@ export const SECTIONS: BreakdownSection[] = [
   },
   {
     key: "diamonds",
+    group: "buy",
     title: "Diamond Economy",
     desc: "How fast and how many — diamonds gate every team upgrade. Only games that ran 6+ minutes. Across all games more diamonds looks strongly better, but that is mostly game length: a game you lost in three minutes never reached mid. Inside a comparable pool the volume rows point the other way, because farming diamonds means the game dragged.",
     source: "log",
@@ -552,6 +588,7 @@ export const SECTIONS: BreakdownSection[] = [
   },
   {
     key: "position",
+    group: "when",
     title: "Session Position",
     desc: "Warmup vs fatigue — where in the day's session a game fell",
     source: "log",
@@ -561,6 +598,7 @@ export const SECTIONS: BreakdownSection[] = [
   },
   {
     key: "upgrades",
+    group: "buy",
     title: "Upgrades",
     desc: "Every team upgrade — prot tiers, Haste, forges, traps",
     source: "log",
@@ -574,6 +612,7 @@ export const SECTIONS: BreakdownSection[] = [
   },
   {
     key: "items",
+    group: "buy",
     title: "Misc Items",
     desc: "Do potions, pearls, KB stick, water… actually win games? Only games that ran 6+ minutes: ungated, this measured whether you survived long enough to reach the shop, and every item looked like a winner. Compare the rows against each other, not against your overall win rate.",
     source: "log",
@@ -588,6 +627,7 @@ export const SECTIONS: BreakdownSection[] = [
   },
   {
     key: "requeue",
+    group: "when",
     title: "Requeue Speed",
     desc: "How long you waited before starting this game. Unlike most rows here this is fixed before the game begins, so it can't be an artefact of how the game went — and it holds independently after wins and after losses.",
     source: "log",
@@ -596,6 +636,7 @@ export const SECTIONS: BreakdownSection[] = [
   },
   {
     key: "tags",
+    group: "yours",
     title: "Tags",
     desc: "Every tag as its own row — new tags appear automatically",
     source: "tag",

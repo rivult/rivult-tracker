@@ -21,6 +21,7 @@ import { cn } from "../lib/cn";
 import { ratio } from "../lib/format";
 import {
   DEFAULT_MIN_GAMES,
+  GROUPS,
   SECTIONS,
   groupBy,
   sectionByKey,
@@ -46,16 +47,27 @@ export function BreakdownsPage() {
   }
 
   return (
-    <div className="space-y-6 pb-24">
+    <div className="space-y-8 pb-24">
       <div>
         <h1 className="mb-2 text-3xl font-bold">Breakdowns</h1>
         <p className="text-muted-foreground">
-          Hub-and-detail analysis across derived logs and manual tags.
+          Eighteen ways to slice your games, grouped by what they can tell you.
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {SECTIONS.map((s) => {
+      {/* Grouped rather than one flat grid of 18: nothing in a wall of cards
+          tells you where to start or which questions are related. */}
+      {GROUPS.map((grp) => {
+        const inGroup = SECTIONS.filter((s) => s.group === grp.key);
+        if (!inGroup.length) return null;
+        return (
+          <section key={grp.key} className="space-y-3">
+            <div>
+              <h2 className="text-xl font-semibold">{grp.title}</h2>
+              <p className="text-sm text-muted-foreground">{grp.blurb}</p>
+            </div>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        {inGroup.map((s) => {
           // BUG THIS FIXES: this counted with the raw grouper and never called
           // s.prepare, so Streak State (the only section with one) grouped
           // every game to null and advertised "0 groups" for a section that
@@ -90,7 +102,10 @@ export function BreakdownsPage() {
             </button>
           );
         })}
-      </div>
+            </div>
+          </section>
+        );
+      })}
     </div>
   );
 }

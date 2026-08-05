@@ -34,7 +34,7 @@ from typing import Optional
 
 from . import paths
 
-__version__ = "0.12.2"
+__version__ = "0.12.3"
 
 EXE_NAME = "RivultTracker.exe"
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  GROUPS,
   ITEM_LABELS,
   SECTIONS,
   groupBy,
@@ -282,5 +283,26 @@ describe("withRequeueGap", () => {
     const games = [g(2, "10:08:10", "10:16:00"), g(1, "10:00:00", "10:08:00")];
     expect(labelOf(games, 2)).toBe("Instant (<30s)");
     expect(labelOf(games, 1)).toBe("First of the day");
+  });
+});
+
+describe("hub grouping", () => {
+  it("assigns every section to a real group", () => {
+    const keys = new Set(GROUPS.map((g) => g.key));
+    for (const s of SECTIONS) {
+      expect(keys.has(s.group), `${s.key} has group "${s.group}"`).toBe(true);
+    }
+  });
+
+  it("leaves no group empty, so the hub never renders a bare heading", () => {
+    for (const g of GROUPS) {
+      expect(SECTIONS.some((s) => s.group === g.key), `${g.key} is empty`).toBe(true);
+    }
+  });
+
+  it("shows every section exactly once across the groups", () => {
+    const shown = GROUPS.flatMap((g) => SECTIONS.filter((s) => s.group === g.key));
+    expect(shown.length).toBe(SECTIONS.length);
+    expect(new Set(shown.map((s) => s.key)).size).toBe(SECTIONS.length);
   });
 });
