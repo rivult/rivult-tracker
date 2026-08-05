@@ -5,6 +5,7 @@ import {
   groupBy,
   sectionByKey,
   withDayPosition,
+  withRequeueGap,
   withStreakState,
 } from "../breakdowns";
 import type { Game } from "../../api/types";
@@ -233,5 +234,53 @@ describe("diamond economy rows are distinct", () => {
     ).map((r) => r.name);
     expect(rows).toContain("First diamond 1–2m");
     expect(rows).toContain("4–6 diamonds");
+  });
+});
+
+describe("withRequeueGap", () => {
+  const g = (id: number, start: string, end: string, date = "2026-08-01") =>
+    mkGame({ id, date, start_ts: start, end_ts: end });
+  const labelOf = (games: Game[], id: number) =>
+    (withRequeueGap(games) as (Game & { _requeue?: string | null })[])
+      .find((x) => x.id === id)?._requeue;
+
+  it("measures from the previous game's END to this game's START", () => {
+    const games = [g(1, "10:00:00", "10:08:00"), g(2, "10:08:20", "10:16:00")];
+    expect(labelOf(games, 2)).toBe("Instant (<30s)");
+  });
+
+  it("buckets the wait", () => {
+    const cases: [string, string][] = [
+      ["10:08:45", "Quick (30–60s)"],
+      ["10:10:00", "Paused (1–3m)"],
+      ["10:20:00", "Break (3m+)"],
+    ];
+    for (const [start, want] of cases) {
+      const games = [g(1, "10:00:00", "10:08:00"), g(2, start, "10:30:00")];
+      expect(labelOf(games, 2)).toBe(want);
+    }
+  });
+
+  it("labels the first game of a day rather than dropping it", () => {
+    expect(labelOf([g(1, "10:00:00", "10:08:00")], 1)).toBe("First of the day");
+  });
+
+  it("starts over on a new day", () => {
+    const games = [g(1, "23:50:00", "23:58:00", "2026-08-01"),
+                   g(2, "00:05:00", "00:12:00", "2026-08-02")];
+    expect(labelOf(games, 2)).toBe("First of the day");
+  });
+
+  it("ignores a gap long enough to be a break, not a requeue", () => {
+    // two hours later is a different sitting; it says nothing about how fast
+    // the player pressed play
+    const games = [g(1, "10:00:00", "10:08:00"), g(2, "12:30:00", "12:40:00")];
+    expect(labelOf(games, 2)).toBeNull();
+  });
+
+  it("orders by start time, not by array order", () => {
+    const games = [g(2, "10:08:10", "10:16:00"), g(1, "10:00:00", "10:08:00")];
+    expect(labelOf(games, 2)).toBe("Instant (<30s)");
+    expect(labelOf(games, 1)).toBe("First of the day");
   });
 });
