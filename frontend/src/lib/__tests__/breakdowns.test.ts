@@ -21,11 +21,24 @@ describe("SECTIONS / sectionByKey", () => {
 describe("groupBy", () => {
   it("counts a game in every row of a multi-value grouper (Game Flow)", () => {
     const flow = sectionByKey("flow")!;
-    // bed lost + WIN + short game -> "Own bed lost", "Comeback win", a length bucket
-    const comeback = mkGame({ your_bed_lost: 1, result: "WIN", duration_s: 120 });
+    // who broke first + when your bed fell; length moved to its own section
+    const comeback = mkGame({
+      your_bed_lost: 1, bed_lost_ts: "00:02:00", start_ts: "00:00:00",
+      result: "WIN", duration_s: 600,
+    });
     const rows = groupBy([comeback], flow.grouper);
     expect(rows.length).toBeGreaterThanOrEqual(2);
     expect(rows.reduce((n, r) => n + r.agg.games, 0)).toBeGreaterThan(1);
+  });
+
+  it("Game Flow no longer emits length buckets", () => {
+    // they were near-circular next to the flow rows: "games that lasted are
+    // games you were still in". Now their own section, labelled as context.
+    const names = groupBy([mkGame({ duration_s: 900 })], sectionByKey("flow")!.grouper)
+      .map((r) => r.name);
+    expect(names.some((n) => /m\)/.test(n))).toBe(false);
+    expect(groupBy([mkGame({ duration_s: 900 })], sectionByKey("length")!.grouper)
+      .map((r) => r.name)).toEqual(["Grind (10m+)"]);
   });
 
   it("sorts groups by game count descending and skips null keys", () => {
@@ -45,7 +58,7 @@ describe("groupBy", () => {
 
   it("items: a multi-item game lands in every purchased category's row", () => {
     const items = sectionByKey("items")!;
-    const game = mkGame({ items: { jump_potion: 2, water: 1, fireball: 3 } });
+    const game = mkGame({ items: { jump_potion: 2, water: 1, fireball: 3 }, duration_s: 600 });
     const rows = groupBy([game], items.grouper);
     const names = rows.map((r) => r.name);
     expect(names).toContain(ITEM_LABELS.jump_potion);
@@ -56,8 +69,38 @@ describe("groupBy", () => {
 
   it("items: a game with no tracked purchases lands in 'No tracked items'", () => {
     const items = sectionByKey("items")!;
-    const rows = groupBy([mkGame({ items: {} })], items.grouper);
+    const rows = groupBy([mkGame({ items: {}, duration_s: 600 })], items.grouper);
     expect(rows.map((r) => r.name)).toEqual(["No tracked items"]);
+  });
+
+  it("items: short games are excluded entirely", () => {
+    // Ungated, this section measured whether you lived long enough to reach
+    // the shop: every item looked like a winner, and fireball reversed from
+    // +24.1 overall to -14.8 inside 10m+ games.
+    const items = sectionByKey("items")!;
+    const rows = groupBy([mkGame({ items: { fireball: 3 }, duration_s: 120 })], items.grouper);
+    expect(rows).toEqual([]);
+  });
+
+  it("diamonds: short games are excluded entirely", () => {
+    const rows = groupBy(
+      [mkGame({ diamond_pickups: 5, first_diamond_s: 40, duration_s: 120 })],
+      sectionByKey("diamonds")!.grouper,
+    );
+    expect(rows).toEqual([]);
+  });
+
+  it("deaths: void exposure is a rate, so a long game isn't auto-binned high", () => {
+    // 2 void deaths in 20 minutes is a LOW rate; counting them put it in the
+    // top bucket purely for lasting.
+    const long = mkGame({ duration_s: 1200, death_causes: { void_self: 2 } });
+    const short = mkGame({ duration_s: 300, death_causes: { void_self: 2 } });
+    const nameOf = (g: Game) =>
+      groupBy([g], sectionByKey("deaths")!.grouper)
+        .map((r) => r.name)
+        .find((n) => n.includes("void deaths"));
+    expect(nameOf(long)).toBe("Under 1.5 void deaths / 10m");
+    expect(nameOf(short)).toBe("3+ void deaths / 10m");
   });
 });
 
@@ -169,5 +212,26 @@ describe("kill participation is not gated on the outcome", () => {
 
   it("still skips solos, where the share is meaninglessly 100%", () => {
     expect(grouper(game({ teammates: [] }))).toBeNull();
+  });
+});
+
+describe("diamond economy rows are distinct", () => {
+  it("does not report a no-diamond game under two different names", () => {
+    // "No diamonds collected" (timing) and "0 diamonds" (volume) were the
+    // same games twice, both showing n=48 on the live data.
+    const rows = groupBy(
+      [mkGame({ diamond_pickups: 0, first_diamond_s: null, duration_s: 600 })],
+      sectionByKey("diamonds")!.grouper,
+    ).map((r) => r.name);
+    expect(rows).toEqual(["0 diamonds"]);
+  });
+
+  it("still reports timing when a diamond was collected", () => {
+    const rows = groupBy(
+      [mkGame({ diamond_pickups: 5, first_diamond_s: 90, duration_s: 600 })],
+      sectionByKey("diamonds")!.grouper,
+    ).map((r) => r.name);
+    expect(rows).toContain("First diamond 1–2m");
+    expect(rows).toContain("4–6 diamonds");
   });
 });

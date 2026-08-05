@@ -127,8 +127,24 @@ function bedLostAt(g: Game): number | null {
  * implied 152 findings when about 26 were usable. */
 export const DEFAULT_MIN_GAMES = 20;
 
-/** Games shorter than this are excluded — see the note on the gate below. */
-const MIN_PARTICIPATION_LENGTH_S = 360;
+/**
+ * Sections that group on something you can only DO if the game lasted are
+ * restricted to games of at least this length.
+ *
+ * Long games are won far more often than short ones, and buying an item,
+ * collecting a diamond or taking a death all require surviving. Ungated, those
+ * sections measured game length wearing a costume — and two of them reversed
+ * once length was held constant:
+ *
+ *   fireball   raw +24.1 overall, but -6.3 within 7-10m and -14.8 within 10m+
+ *   diamonds   raw +23.8 overall, but ~0 inside a matched length band
+ *
+ * Restricting the pool doesn't remove the effect entirely (the 6min+ pool wins
+ * 67.3% against a 54.8% overall), but it makes the ROWS comparable to each
+ * other, which is what the table asks you to do. Every affected section says
+ * so in its description.
+ */
+const MIN_COMPARABLE_LENGTH_S = 360;
 
 /**
  * Your share of the team's final kills. Solos has no team, so it is skipped
@@ -164,7 +180,7 @@ const MIN_PARTICIPATION_LENGTH_S = 360;
 function killParticipation(g: Game): string | null {
   const team = g.team_final_kills ?? 0;
   if (!team || !g.teammates.length) return null;   // solos / no data
-  if ((g.duration_s ?? 0) < MIN_PARTICIPATION_LENGTH_S) return null;
+  if ((g.duration_s ?? 0) < MIN_COMPARABLE_LENGTH_S) return null;
   const share = (g.your_final_kills ?? 0) / team;
   if (share === 0) return "0% — mate did all of it";
   if (share < 0.34) return "1–33% — supporting";
@@ -206,7 +222,10 @@ const DEATH_CAUSE_LABELS: Record<string, string> = {
  * the whole economy. */
 function firstDiamondBucket(g: Game): string | null {
   const s = g.first_diamond_s;
-  if (s == null) return "No diamonds collected";
+  // No diamond means no TIMING to report. It used to return its own label
+  // here, which duplicated diamondVolume's "0 diamonds" row exactly - the
+  // same games appeared twice under two names, both reading n=48.
+  if (s == null) return null;
   if (s < 60) return "First diamond <1m";
   if (s < 120) return "First diamond 1–2m";
   if (s < 180) return "First diamond 2–3m";
@@ -363,7 +382,7 @@ export const SECTIONS: BreakdownSection[] = [
   {
     key: "flow",
     title: "Game Flow",
-    desc: "How the game went — first bed, when yours fell, how long it ran",
+    desc: "How the game went — who broke the first bed, and whether yours fell early or late",
     source: "log",
     // Reworked 2026-08-01. The old version's headline row was "Bed held" vs
     // "Own bed lost", which is circular: holding your bed and winning are
@@ -378,10 +397,20 @@ export const SECTIONS: BreakdownSection[] = [
       // are completely different games.
       const lost = bedLostAt(g);
       if (lost !== null) out.push(lost < 300 ? "Bed lost early (<5m)" : "Bed lost late (5m+)");
-      const len = lengthBucket(g.duration_s);
-      if (len) out.push(len);
       return out;
     },
+  },
+  {
+    key: "length",
+    title: "Game Length",
+    desc: "How long games ran. This is CONTEXT, not a lever — a game is long because it was close, so the win rate here mostly restates that. It is here because game length drives several other sections and it helps to see its shape directly.",
+    source: "log",
+    // Split out of Game Flow 2026-08-04. Mixed in there it was compared against
+    // one overall average alongside first-bed and bed-timing rows, and the
+    // length rows were near-circular on their own: "Medium (6-10m)" won 68.3%
+    // against "Fast (3-6m)" at 44.5%, which says little more than "games that
+    // lasted are games you were still in".
+    grouper: (g) => lengthBucket(g.duration_s),
   },
   {
     key: "participation",
@@ -429,17 +458,32 @@ export const SECTIONS: BreakdownSection[] = [
       const out = Object.keys(causes)
         .filter((c) => causes[c] > 0)
         .map((c) => DEATH_CAUSE_LABELS[c] ?? c);
+      // Void exposure as a RATE, not a count. Counting them made a long game
+      // land in "2+ void deaths" automatically, so the row measured length:
+      // raw, having a void death looked GOOD for you (+5.0 win rate), and
+      // controlled for length it was bad in every band (-11.5, -4.5, -6.2).
+      // Per 10 minutes it behaves: 71.1% at under 1.5, 47.6% at 3+.
       const voids = (causes.void_self ?? 0) + (causes.void_knocked ?? 0);
-      out.push(voids === 0 ? "No void deaths" : voids === 1 ? "1 void death" : "2+ void deaths");
+      const mins = (g.duration_s ?? 0) / 600;
+      if (mins > 0.2) {
+        const rate = voids / mins;
+        out.push(
+          voids === 0 ? "No void deaths"
+            : rate < 1.5 ? "Under 1.5 void deaths / 10m"
+            : rate < 3 ? "1.5–3 void deaths / 10m"
+            : "3+ void deaths / 10m",
+        );
+      }
       return out;
     },
   },
   {
     key: "diamonds",
     title: "Diamond Economy",
-    desc: "How fast and how many — diamonds gate every team upgrade",
+    desc: "How fast and how many — diamonds gate every team upgrade. Only games that ran 6+ minutes. Across all games more diamonds looks strongly better, but that is mostly game length: a game you lost in three minutes never reached mid. Inside a comparable pool the volume rows point the other way, because farming diamonds means the game dragged.",
     source: "log",
     grouper: (g) => {
+      if ((g.duration_s ?? 0) < MIN_COMPARABLE_LENGTH_S) return null;
       const out: string[] = [];
       const first = firstDiamondBucket(g);
       const vol = diamondVolume(g);
@@ -473,9 +517,10 @@ export const SECTIONS: BreakdownSection[] = [
   {
     key: "items",
     title: "Misc Items",
-    desc: "Do potions, pearls, KB stick, water… actually win games?",
+    desc: "Do potions, pearls, KB stick, water… actually win games? Only games that ran 6+ minutes: ungated, this measured whether you survived long enough to reach the shop, and every item looked like a winner. Compare the rows against each other, not against your overall win rate.",
     source: "log",
     grouper: (g) => {
+      if ((g.duration_s ?? 0) < MIN_COMPARABLE_LENGTH_S) return null;
       const bought = Object.keys(g.items ?? {}).map(
         (k) => ITEM_LABELS[k] ?? k,
       );
