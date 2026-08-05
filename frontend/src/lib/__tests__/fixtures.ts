@@ -37,7 +37,21 @@ export function mkGame(p: Partial<Game> = {}): Game {
     duration_s: p.duration_s === undefined ? 300 : p.duration_s,
     // NOTE: this builder lists every field explicitly, so anything missing
     // here is silently dropped from overrides. Add new Game fields to it.
+    //
+    // The seven below were missing, and every one of them backs a breakdown:
+    // a test overriding `team_final_kills` got `undefined` and passed for the
+    // wrong reason, which is exactly the failure this note warns about.
+    upgrade_names: p.upgrade_names ?? [],
+    first_bed: p.first_bed ?? null,
+    team_final_kills: p.team_final_kills ?? null,
+    first_upgrade_s: p.first_upgrade_s ?? null,
+    diamond_pickups: p.diamond_pickups ?? null,
+    first_diamond_s: p.first_diamond_s ?? null,
+    death_cause: p.death_cause ?? null,
+    death_causes: p.death_causes ?? {},
     counted: p.counted,
     uncounted_reason: p.uncounted_reason,
+    uncounted_kind: p.uncounted_kind,
+    result_overridden: p.result_overridden,
   };
 }

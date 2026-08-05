@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { ITEM_LABELS, SECTIONS, groupBy, sectionByKey, withStreakState } from "../breakdowns";
+import {
+  ITEM_LABELS,
+  SECTIONS,
+  groupBy,
+  sectionByKey,
+  withDayPosition,
+  withStreakState,
+} from "../breakdowns";
 import type { Game } from "../../api/types";
 import { mkGame } from "./fixtures";
 
@@ -100,5 +107,67 @@ describe("withStreakState", () => {
     const byId = new Map(out.map((x) => [x.id, (x as never as { _streak: string })._streak]));
     expect(byId.get(1)).toBe("First of session");
     expect(byId.get(2)).toBe("After a win");
+  });
+});
+
+/* ---------------- review fixes, 2026-08-04 ---------------- */
+
+describe("session position is measured per DAY", () => {
+  // `idx` resets when the client restarts, so one evening was split across
+  // several "sessions" and the late-session drop-off vanished.
+  const day = (date: string, n: number, session: string) =>
+    Array.from({ length: n }, (_, i) =>
+      mkGame({
+        id: Number(`${date.replace(/-/g, "")}${i}`),
+        date,
+        start_ts: `${String(10 + Math.floor(i / 6)).padStart(2, "0")}:${String((i * 7) % 60).padStart(2, "0")}:00`,
+        session_id: session,
+        idx: i % 4, // deliberately wrong: a restart every 4 games
+      }),
+    );
+
+  it("orders by time of day, not by the session index", () => {
+    const games = withDayPosition(day("2026-08-01", 20, "s"));
+    const withPos = games as (Game & { _dayPos?: number | null })[];
+    const positions = withPos
+      .slice()
+      .sort((a, b) => `${a.start_ts}`.localeCompare(`${b.start_ts}`))
+      .map((g) => g._dayPos);
+    expect(positions).toEqual([...Array(20).keys()]);
+  });
+
+  it("restarts numbering on a new day", () => {
+    const games = withDayPosition([
+      ...day("2026-08-01", 5, "a"),
+      ...day("2026-08-02", 5, "b"),
+    ]) as (Game & { _dayPos?: number | null })[];
+    const second = games.filter((g) => g.date === "2026-08-02");
+    expect(Math.min(...second.map((g) => g._dayPos ?? -1))).toBe(0);
+  });
+
+  it("reaches the late-session bucket that idx could not", () => {
+    const games = withDayPosition(day("2026-08-01", 20, "s"));
+    const rows = groupBy(games, sectionByKey("position")!.grouper);
+    expect(rows.map((r) => r.name)).toContain("Fatigue (16+)");
+  });
+});
+
+describe("kill participation is not gated on the outcome", () => {
+  const game = (over: Partial<Parameters<typeof mkGame>[0]>) =>
+    mkGame({ teammates: ["mate"], team_final_kills: 4, your_final_kills: 2,
+              duration_s: 600, ...over });
+  const grouper = sectionByKey("participation")!.grouper;
+
+  it("admits a long game even when the team got very few finals", () => {
+    // the old gate (team finals >= 4) was a 71.9-point proxy for winning
+    expect(grouper(game({ team_final_kills: 1, your_final_kills: 1 }))).not.toBeNull();
+  });
+
+  it("excludes games too short for anyone to have got going", () => {
+    expect(grouper(game({ duration_s: 120 }))).toBeNull();
+  });
+
+  it("still skips solos, where the share is meaninglessly 100%", () => {
+    expect(grouper(game({ teammates: [] }))).toBeNull();
   });
 });

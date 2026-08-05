@@ -117,14 +117,54 @@ function bedLostAt(g: Game): number | null {
  * Measured on the real corpus, the 0% and 100% rows were dominated by games
  * with ~3 team finals and both showed ~22% win rates — an artefact of short
  * lost games, not evidence about carrying. */
-const MIN_TEAM_FINALS = 4;
+/** Default minimum games for a row to be shown, used by BOTH the detail table
+ * and the hub card's group count.
+ *
+ * It was 5, which let the page open full of noise: Maps produced 152 rows with
+ * 126 under 20 games, Teammates 365 rows with 359 under 20. A row like
+ * "n=20, 95% WR, 21.00 FKDR" was rendered with exactly the same authority as
+ * one built on 379 games. The hub card counted raw rows too, so "152 groups"
+ * implied 152 findings when about 26 were usable. */
+export const DEFAULT_MIN_GAMES = 20;
 
-/** Your share of the team's final kills. Solos has no team, so it is skipped
- * rather than reported as a meaningless 100%. */
+/** Games shorter than this are excluded — see the note on the gate below. */
+const MIN_PARTICIPATION_LENGTH_S = 360;
+
+/**
+ * Your share of the team's final kills. Solos has no team, so it is skipped
+ * rather than reported as a meaningless 100%.
+ *
+ * THE GATE IS THE WHOLE PROBLEM WITH THIS SECTION. It used to admit only games
+ * with 4+ team final kills, and that single condition decided the answer:
+ *
+ *     team finals >= 4 : 84.3% WR (n=999)
+ *     team finals <  4 : 12.4% WR (n=693)
+ *
+ * a 71.9-point swing before any bucketing. Getting four team finals essentially
+ * IS winning, so every bucket landed near 85% and the section reported the
+ * outcome it had conditioned on — the same circularity that got the old
+ * "Bed held" row (99.6% win rate) removed.
+ *
+ * Gating on game LENGTH instead keeps the question answerable without letting
+ * the outcome in through the back door. Long games are still won more often
+ * (+12.5 points against the overall average, stated in the section text), but
+ * that is a property of the pool rather than of the buckets, and the buckets
+ * now actually separate:
+ *
+ *     0%    mate did all of it   22.8%
+ *     1-33% supporting           77.0%
+ *     34-66% even split          78.3%
+ *     67-99% carrying            84.8%
+ *     100%  all of them          47.7%
+ *
+ * The shape is a genuine finding rather than an artefact: doing none of the
+ * finals is bad, and doing literally ALL of them is nearly as bad, because it
+ * usually means your team stopped contributing.
+ */
 function killParticipation(g: Game): string | null {
   const team = g.team_final_kills ?? 0;
   if (!team || !g.teammates.length) return null;   // solos / no data
-  if (team < MIN_TEAM_FINALS) return null;
+  if ((g.duration_s ?? 0) < MIN_PARTICIPATION_LENGTH_S) return null;
   const share = (g.your_final_kills ?? 0) / team;
   if (share === 0) return "0% — mate did all of it";
   if (share < 0.34) return "1–33% — supporting";
@@ -182,11 +222,43 @@ function diamondVolume(g: Game): string | null {
   return "7+ diamonds";
 }
 
-function sessionPosition(idx: number | null): string | null {
-  if (idx == null) return null;
-  if (idx < 3) return "Warmup (games 1–3)";
-  if (idx < 10) return "Mid-session (4–10)";
-  return "Fatigue (11+)";
+function sessionPosition(pos: number | null): string | null {
+  if (pos == null) return null;
+  if (pos < 3) return "Warmup (games 1–3)";
+  if (pos < 10) return "Mid-session (4–10)";
+  if (pos < 15) return "Peak (11–15)";
+  return "Fatigue (16+)";
+}
+
+/** Position of each game within its DAY.
+ *
+ * This used to read `g.idx`, the index within a `session_id` — and a session
+ * id resets whenever the client restarts or the log rotates, so one evening's
+ * play was split across several "sessions". That put only 65 games in the
+ * late bucket and flattened the effect to almost nothing. Measured both ways
+ * on the same 1,756 games:
+ *
+ *     per day   1-3 51.5%  4-10 56.0%  11-15 61.9%  16+ 50.4%   spread 11.6
+ *     by idx    1-3 52.3%  4-10 56.1%  11-15 55.7%  16+ 53.8%   spread  3.8
+ *
+ * The warm-up climb and the late-session drop are both real and both invisible
+ * under `idx`. A day is also what a player actually means by "my session".
+ */
+export function withDayPosition(games: Game[]): Game[] {
+  const byDay = new Map<string, Game[]>();
+  for (const g of games) {
+    if (!g.date) continue;
+    const list = byDay.get(g.date) ?? [];
+    list.push(g);
+    byDay.set(g.date, list);
+  }
+  const pos = new Map<number, number>();
+  for (const list of byDay.values()) {
+    [...list]
+      .sort((a, b) => `${a.start_ts ?? ""}`.localeCompare(`${b.start_ts ?? ""}`))
+      .forEach((g, i) => pos.set(g.id, i));
+  }
+  return games.map((g) => ({ ...g, _dayPos: pos.get(g.id) ?? null }));
 }
 
 /** Streak bucket for every game, based on the games BEFORE it in its session.
@@ -314,7 +386,7 @@ export const SECTIONS: BreakdownSection[] = [
   {
     key: "participation",
     title: "Kill Participation",
-    desc: `Your share of the team's final kills — carrying vs being carried. Games with under ${MIN_TEAM_FINALS} team finals are excluded: the share is meaningless at that size.`,
+    desc: "Your share of the team's final kills — carrying vs being carried. Only games that ran 6+ minutes, so the split isn't decided by a game ending before anyone got going. Those games are won more often than average, so read the rows against each other rather than against your overall win rate.",
     source: "log",
     grouper: killParticipation,
   },
@@ -379,9 +451,11 @@ export const SECTIONS: BreakdownSection[] = [
   {
     key: "position",
     title: "Session Position",
-    desc: "Warmup vs fatigue — game 1–3 vs 11+",
+    desc: "Warmup vs fatigue — where in the day's session a game fell",
     source: "log",
-    grouper: (g) => sessionPosition(g.idx),
+    prepare: withDayPosition,
+    grouper: (g) =>
+      sessionPosition((g as Game & { _dayPos?: number | null })._dayPos ?? null),
   },
   {
     key: "upgrades",

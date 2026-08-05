@@ -19,7 +19,13 @@ import {
 import { Card, CardLabel, EmptyState, RangePicker } from "../components/shared";
 import { cn } from "../lib/cn";
 import { ratio } from "../lib/format";
-import { SECTIONS, groupBy, sectionByKey, type BreakdownRow } from "../lib/breakdowns";
+import {
+  DEFAULT_MIN_GAMES,
+  SECTIONS,
+  groupBy,
+  sectionByKey,
+  type BreakdownRow,
+} from "../lib/breakdowns";
 import { ALL_TIME_RANGE, aggregate, inRange, type DateRange } from "../lib/stats";
 import { useData } from "../state/DataContext";
 import { useNav } from "../state/NavContext";
@@ -50,7 +56,16 @@ export function BreakdownsPage() {
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {SECTIONS.map((s) => {
-          const groups = groupBy(games, s.grouper).length;
+          // BUG THIS FIXES: this counted with the raw grouper and never called
+          // s.prepare, so Streak State (the only section with one) grouped
+          // every game to null and advertised "0 groups" for a section that
+          // works the moment you open it. It also counted rows the detail
+          // table then hides, so "152 groups" promised 152 findings when ~26
+          // cleared the bar.
+          const prepared = s.prepare ? s.prepare(games) : games;
+          const groups = groupBy(prepared, s.grouper).filter(
+            (r) => r.agg.games >= DEFAULT_MIN_GAMES,
+          ).length;
           return (
             <button
               key={s.key}
@@ -129,7 +144,7 @@ function SectionDetail({ sectionKey, onBack }: { sectionKey: string; onBack: () 
     sectionRanges.set(sectionKey, next);
     setRangeState(next);
   };
-  const [threshold, setThreshold] = useState(5);
+  const [threshold, setThreshold] = useState(DEFAULT_MIN_GAMES);
   const [sort, setSort] = useState<DetailSort>("games");
   const [desc, setDesc] = useState(true);
 
