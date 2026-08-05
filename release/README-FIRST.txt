@@ -1,9 +1,45 @@
-RIVULT BEDWARS TRACKER — test build v0.12.2
+RIVULT BEDWARS TRACKER — test build v0.12.3
 ===========================================
 
 Thanks for testing. This reads your Minecraft chat log and turns it into
 per-game stats you can tag and filter. No Hypixel API, no login, nothing
 leaves your PC.
+
+
+NEW IN 0.12.3 — the breakdowns audit
+------------------------------------
+Every breakdown was re-tested against 1,692 real games, with GAME LENGTH held
+constant. That last part is the whole story: long games are won far more often
+than short ones, and buying an item, collecting a diamond or taking a death
+all require surviving. Several sections were measuring game length in
+disguise, and two of them pointed the WRONG WAY once that was controlled for.
+
+* SOME NUMBERS NOW SAY THE OPPOSITE. Diamond Economy used to tell you more
+  diamonds means winning. Among games of comparable length it is the reverse
+  (0 diamonds 3.36 W/L, 7+ diamonds 1.48) -- farming diamonds means the game
+  dragged. Misc Items mostly shows NO effect now; the old spread was just
+  "did you live long enough to reach the shop". These are corrections, not
+  regressions.
+* HOW YOU DIE counts void deaths as a RATE per 10 minutes. As a raw count, a
+  long game landed in the top bucket automatically, which made void deaths
+  look GOOD for you. Per 10 minutes it behaves: 2.45 W/L under 1.5, 0.91 at 3+.
+* KILL PARTICIPATION was circular. Its old "4+ team final kills" entry rule was
+  a 72-point proxy for winning on its own, so every row read ~85%. Gated on
+  game length instead, the rows separate from 0.30 to 5.57 W/L -- and doing
+  ALL of your team's finals turns out to be nearly as bad as doing none.
+* SESSION POSITION counts within the DAY. It used to count within a client
+  session, which resets whenever Minecraft restarts, so a long evening was
+  split up and the late-session drop-off was invisible.
+* STREAK STATE was showing "0 groups" on the hub. It always worked when you
+  opened it; the card was counting wrong.
+* NEW: REQUEUE SPEED. How long you waited before starting the game. Unlike
+  most rows, this is fixed before the game begins, so it can't be an artefact
+  of how the game went -- and it holds independently after wins and losses.
+* Small-sample rows are hidden by default (20 games, was 5). Teammates showed
+  365 rows of which 359 had under 20 games; it now shows 6.
+* GAME LENGTH is its own section, split out of Game Flow, and labelled as
+  context rather than advice.
+* The 18 breakdowns are now grouped into bands instead of one flat wall.
 
 
 NEW IN 0.12.2
