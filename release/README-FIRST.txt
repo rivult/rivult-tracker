@@ -1,9 +1,31 @@
-RIVULT BEDWARS TRACKER — test build v0.12.1
+RIVULT BEDWARS TRACKER — test build v0.12.2
 ===========================================
 
 Thanks for testing. This reads your Minecraft chat log and turns it into
 per-game stats you can tag and filter. No Hypixel API, no login, nothing
 leaves your PC.
+
+
+NEW IN 0.12.2
+-------------
+* SNAPSHOT PAGE (sidebar, below the divider). Every headline stat for every
+  period in one table: today, last 7 / 30 / 365 days, year-to-date, all time,
+  plus a custom range. Games, wins, losses, WLR, win %, kills, deaths, KDR,
+  final kills/deaths, FKDR, beds broken/lost, BBLR -- with mode chips.
+  Week, month and year are ROLLING windows ending today, not calendar months.
+* AUTO COMMANDS ARE ~6x FASTER: the /locraw + /who pair used to take about two
+  seconds after your delay and sometimes arrived with letters missing. Each
+  command is now typed in a single atomic keystroke burst, which Windows
+  guarantees can't be interleaved with your own keys. 2.02s -> 0.35s, and the
+  window where a stray keypress can corrupt a command dropped from ~0.43s to
+  ~0.15s per command.
+* TEST BUTTON for auto commands (Settings -> Auto commands -> "Test now").
+  Fires the same two commands after a countdown long enough to alt-tab, so you
+  can check them without starting a game. It still refuses unless Minecraft is
+  focused, so nothing is ever typed into another app.
+* The chat key now applies immediately. It used to be read once at startup, so
+  changing it and retesting silently kept using the old key.
+* Fixed: the tag filter chip read "-1" when a tag was hidden; now "1 hidden".
 
 
 NEW IN 0.12.1

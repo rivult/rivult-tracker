@@ -10,6 +10,7 @@
 import { useMemo, useState } from "react";
 import { EmptyState } from "../components/shared";
 import { cn } from "../lib/cn";
+import { localISO } from "../lib/format";
 import {
   SNAPSHOT_ROWS,
   snapshotColumns,
@@ -30,7 +31,13 @@ function cell(value: number, kind: "count" | "ratio", games: number): string {
 export function SnapshotPage() {
   const { data, loading } = useData();
   const [mode, setMode] = useState<string>("");
-  const [custom, setCustom] = useState<CustomRange>({ from: "", to: "" });
+  // Prefilled with today rather than left blank: an empty date input is
+  // awkward to start from, and today is the range you narrow OUT of. Clearing
+  // still empties both and removes the column.
+  const [custom, setCustom] = useState<CustomRange>(() => {
+    const today = localISO(new Date());
+    return { from: today, to: today };
+  });
 
   const games = data?.games ?? [];
   const modeGames = useMemo(
