@@ -5,7 +5,10 @@ import { CLOUD_ENABLED } from "../lib/features";
 import { useData } from "../state/DataContext";
 
 export const STAT_PAGES = ["Today", "Games", "Breakdowns", "Trends", "Personal Bests", "Bridging"] as const;
-export const META_PAGES = ["Account", "Settings", "Updates", "Community"] as const;
+// Snapshot sits BELOW the divider with the utility pages, not with the
+// analysis pages above it. It is a lookup table rather than something to read
+// and interpret, and the user asked for it "off to the side".
+export const META_PAGES = ["Snapshot", "Account", "Settings", "Updates", "Community"] as const;
 
 export type PageName = (typeof STAT_PAGES)[number] | (typeof META_PAGES)[number];
 

@@ -12,11 +12,12 @@ import { BreakdownsPage } from "./pages/BreakdownsPage";
 import { TrendsPage } from "./pages/TrendsPage";
 import { PersonalBestsPage } from "./pages/PersonalBestsPage";
 import { BridgingPage } from "./pages/BridgingPage";
+import { SnapshotPage } from "./pages/SnapshotPage";
 import { AccountPage, CommunityPage, SettingsPage, UpdatesPage } from "./pages/MetaPages";
 
 /** Pages the global tag filter scopes. Personal Bests is absolute (records
  * don't change with a filter), so it greys out alongside the meta pages. */
-const FILTERED_PAGES: PageName[] = ["Today", "Games", "Breakdowns", "Trends"];
+const FILTERED_PAGES: PageName[] = ["Today", "Games", "Breakdowns", "Trends", "Snapshot"];
 
 const PAGES: Record<PageName, () => React.JSX.Element> = {
   Today: TodayPage,
@@ -25,6 +26,7 @@ const PAGES: Record<PageName, () => React.JSX.Element> = {
   Trends: TrendsPage,
   "Personal Bests": PersonalBestsPage,
   Bridging: BridgingPage,
+  Snapshot: SnapshotPage,
   Account: AccountPage,
   Settings: SettingsPage,
   Updates: UpdatesPage,
