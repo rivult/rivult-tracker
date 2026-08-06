@@ -34,3 +34,58 @@ describe("personalBests", () => {
     expect(keys).not.toContain("session-fkdr");
   });
 });
+
+describe("lifetime milestones", () => {
+  const games = [
+    mkGame({ date: "2025-09-12", duration_s: 600, map: "Nebuc", mode: "Doubles",
+             teammates: ["mate"], result: "WIN", your_kills: 3, your_final_kills: 2,
+             beds_broken: 1 }),
+    mkGame({ date: "2025-09-12", duration_s: 300, map: "Nebuc", mode: "Doubles",
+             teammates: ["mate"], result: "FINAL_DEATH", your_kills: 1 }),
+    mkGame({ date: "2026-01-05", duration_s: 900, map: "Aquarium", mode: "Solos",
+             teammates: [], result: "WIN", your_kills: 5 }),
+  ];
+  const byKey = () => {
+    const { records } = personalBests(games);
+    return new Map(records.map((r) => [r.key, r]));
+  };
+
+  it("reports playtime, which was aggregated but never shown", () => {
+    // 600 + 300 + 900 = 1800s = 0.5h
+    expect(byKey().get("life-playtime")?.value).toBe("30m");
+  });
+
+  it("switches playtime from minutes to hours as it grows", () => {
+    const many = Array.from({ length: 40 }, () => mkGame({ date: "2026-01-01", duration_s: 600 }));
+    const rec = new Map(personalBests(many).records.map((r) => [r.key, r]));
+    expect(rec.get("life-playtime")?.value).toBe("6.7h");
+  });
+
+  it("counts distinct days, not games", () => {
+    expect(byKey().get("life-days")?.value).toBe("2");
+  });
+
+  it("names the busiest day and how many games it held", () => {
+    const busiest = byKey().get("life-busiest");
+    expect(busiest?.value).toBe("2");
+    expect(busiest?.date).toBe("2025-09-12");
+  });
+
+  it("picks the most-played map, mode and teammate by count", () => {
+    const m = byKey();
+    expect(m.get("life-map")?.value).toBe("Nebuc");
+    expect(m.get("life-mode")?.value).toBe("Doubles");
+    expect(m.get("life-mate")?.value).toBe("mate");
+  });
+
+  it("dates the first tracked game readably, keeping the ISO date in detail", () => {
+    const since = byKey().get("life-since");
+    expect(since?.value).not.toBe("2025-09-12");   // not raw machine output
+    expect(since?.detail).toContain("2025-09-12");
+  });
+
+  it("survives a game with no map, mode or teammates", () => {
+    const { records } = personalBests([mkGame({ date: "2026-01-01", map: null, mode: null, teammates: [] })]);
+    expect(records.every((r) => typeof r.value === "string")).toBe(true);
+  });
+});

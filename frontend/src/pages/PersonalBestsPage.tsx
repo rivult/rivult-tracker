@@ -8,6 +8,7 @@ import { api } from "../api/client";
 import { EMPTY_TAG_FILTER, type Game } from "../api/types";
 import { stripDreamModes } from "../state/DataContext";
 import { Card, EmptyState } from "../components/shared";
+import { cn } from "../lib/cn";
 import { prettyDate } from "../lib/format";
 import { personalBests, type BestRecord } from "../lib/bests";
 
@@ -89,7 +90,21 @@ function PbCard({ record, accent = false }: { record: BestRecord; accent?: boole
         {accent && <Trophy className="h-4 w-4 shrink-0 text-muted-foreground/60" />}
       </div>
       <div>
-        <div className="mb-1.5 text-4xl font-bold tabular-nums">{record.value}</div>
+        {/* Milestones can be names ("Highland Peaks") or dates, not only
+            counts. At 4xl those overflow a quarter-width card, so the size
+            steps down with length and word-breaks as a last resort. */}
+        <div
+          className={cn(
+            "mb-1.5 font-bold tabular-nums break-words",
+            record.value.length > 12
+              ? "text-xl"
+              : record.value.length > 8
+                ? "text-2xl"
+                : "text-4xl",
+          )}
+        >
+          {record.value}
+        </div>
         <div className="text-xs text-muted-foreground">
           {record.date ? prettyDate(record.date) : "All-time"}
           {record.detail ? ` · ${record.detail}` : ""}
