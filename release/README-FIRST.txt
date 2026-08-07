@@ -1,9 +1,28 @@
-RIVULT BEDWARS TRACKER — test build v0.12.3
+RIVULT BEDWARS TRACKER — test build v0.12.4
 ===========================================
 
 Thanks for testing. This reads your Minecraft chat log and turns it into
 per-game stats you can tag and filter. No Hypixel API, no login, nothing
 leaves your PC.
+
+
+NEW IN 0.12.4
+-------------
+* IF THE APP EVER "DOESN'T OPEN": it now says why instead of doing nothing.
+  Rivult draws its window with Microsoft's WebView2 runtime, which Windows 11
+  ships but some Windows 10 machines don't have. Previously that failed
+  silently -- no window, no error, nothing to report. Now it opens in your
+  browser with a one-line explanation and a link, and the runtime version is
+  written to rivult.log on every launch so a bug report answers the question
+  by itself.
+* If the app is running WITHOUT its own window (browser mode), it now has a
+  tray icon and a second launch re-opens the tab. Before, that state held the
+  single-instance lock invisibly, so launching again did nothing at all and
+  the only way out was Task Manager.
+* LIFETIME MILESTONES on Personal Bests went from 4 to 11: time played, days
+  played, tracking-since, lifetime kills, busiest day, most-played map, mode
+  and teammate. Most now carry a second line that gives the number meaning
+  ("10.8 games a day" rather than a bare 156).
 
 
 NEW IN 0.12.3 — the breakdowns audit

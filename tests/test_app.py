@@ -189,27 +189,61 @@ class WebView2FallbackTest(unittest.TestCase):
         ok = app._run_windowed(Boom(), "http://127.0.0.1:1", ":memory:", {})
         self.assertFalse(ok)
 
-    def test_the_fallback_message_is_used_when_one_is_given(self):
-        import bedwars_parser.app as app
-        printed = []
-        real_print = __builtins__["print"] if isinstance(__builtins__, dict) else print
+    def test_the_fallback_registers_show_and_quit_and_reports_the_reason(self):
+        """The fallback must behave like a real instance.
 
+        It used to register nothing and loop forever, so the process held the
+        single-instance mutex while /api/app/show found no window (404) and no
+        tray existed to quit it. A later launch then printed "already running
+        - bringing it to the front" and exited, forever, with nothing visible.
+        """
         import builtins
-        orig, builtins.print = builtins.print, lambda *a, **k: printed.append(" ".join(map(str, a)))
+        import threading as _th
+        import webbrowser
+        import bedwars_parser.app as app
+        import bedwars_parser.tray as tray_mod
+
+        printed: list = []
+        opened: list = []
+        app_cb: dict = {}
+
+        orig_print, builtins.print = builtins.print,             lambda *a, **k: printed.append(" ".join(map(str, a)))
+        orig_open, webbrowser.open = webbrowser.open, lambda u, *a, **k: opened.append(u)
+        orig_tray, tray_mod.start_tray = tray_mod.start_tray, lambda *a, **k: None
         try:
-            import webbrowser
-            orig_open, webbrowser.open = webbrowser.open, lambda *a, **k: None
-            try:
-                # KeyboardInterrupt ends the sleep loop immediately
-                import time
-                orig_sleep, time.sleep = time.sleep, lambda *a: (_ for _ in ()).throw(KeyboardInterrupt)
-                try:
-                    app._run_browser_fallback("http://x", why="WEBVIEW2 MISSING")
-                finally:
-                    time.sleep = orig_sleep
-            finally:
-                webbrowser.open = orig_open
+            # quit shortly after the loop starts, the way the tray would
+            _th.Timer(0.25, lambda: app_cb["quit"]()).start()
+            app._run_browser_fallback("http://x", why="REASON HERE", app_cb=app_cb)
         finally:
-            builtins.print = orig
-        self.assertTrue(any("WEBVIEW2 MISSING" in p for p in printed),
-                        f"reason not printed: {printed}")
+            builtins.print = orig_print
+            webbrowser.open = orig_open
+            tray_mod.start_tray = orig_tray
+
+        self.assertTrue(any("REASON HERE" in p for p in printed), printed)
+        self.assertIn("http://x", opened)          # the tab was opened
+        self.assertTrue(callable(app_cb.get("show")), "no show handler registered")
+        self.assertTrue(callable(app_cb.get("quit")), "no quit handler registered")
+
+    def test_a_second_launch_can_reopen_the_tab(self):
+        """What /api/app/show calls when there is no window to raise."""
+        import webbrowser
+        import bedwars_parser.app as app
+        import bedwars_parser.tray as tray_mod
+        import threading as _th
+
+        opened: list = []
+        app_cb: dict = {}
+        orig_open, webbrowser.open = webbrowser.open, lambda u, *a, **k: opened.append(u)
+        orig_tray, tray_mod.start_tray = tray_mod.start_tray, lambda *a, **k: None
+        try:
+            _th.Timer(0.25, lambda: app_cb["quit"]()).start()
+            app._run_browser_fallback("http://x", app_cb=app_cb)
+            # still inside the patch: restoring webbrowser.open first would
+            # send this at the real browser and record nothing
+            opened.clear()
+            app_cb["show"]()                        # the second launch's signal
+        finally:
+            webbrowser.open = orig_open
+            tray_mod.start_tray = orig_tray
+
+        self.assertEqual(opened, ["http://x"])

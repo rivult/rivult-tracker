@@ -173,7 +173,7 @@ def run(log_path: Optional[str], db_path: str, host="127.0.0.1", port=8770) -> N
     try:
         import webview  # optional dependency
     except ImportError:
-        _run_browser_fallback(url)
+        _run_browser_fallback(url, app_cb=app_cb, db_path=db_path)
         return
 
     # Pre-flight rather than let webview.start() throw. With console=False a
@@ -192,13 +192,15 @@ def run(log_path: Optional[str], db_path: str, host="127.0.0.1", port=8770) -> N
             "  To get the native window, install the free 'Evergreen "
             "Bootstrapper':\n"
             "  https://developer.microsoft.com/microsoft-edge/webview2/\n"
-            "  (Windows 11 has it already; some Windows 10 installs do not.)"))
+            "  (Windows 11 has it already; some Windows 10 installs do not.)"),
+            app_cb=app_cb, db_path=db_path)
         return
 
     if not _run_windowed(webview, url, db_path, app_cb):
         _run_browser_fallback(url, why=(
             "Rivult could not open its own window - see the traceback above.\n"
-            f"Opening {url} in your browser instead; everything works there."))
+            f"Opening {url} in your browser instead; everything works there."),
+            app_cb=app_cb, db_path=db_path)
 
 
 # The WebView2 Evergreen runtime, which pywebview's Windows backend renders
@@ -233,7 +235,23 @@ def webview2_version() -> Optional[str]:
     return None
 
 
-def _run_browser_fallback(url: str, why: str = "") -> None:
+def _run_browser_fallback(url: str, why: str = "",
+                          app_cb: Optional[dict] = None,
+                          db_path: Optional[str] = None) -> None:
+    """Run headless-but-tracking, with the dashboard in the user's browser.
+
+    THE BUG THIS FIXES (a real user, 2026-08-06): this path used to register
+    no "show" callback and start no tray, then loop forever. The result was an
+    invisible process that still held the single-instance mutex, so every
+    later launch printed "Rivult is already running - bringing it to the
+    front" and exited — while the front-bringing was a no-op, because
+    /api/app/show found no window and returned 404. With no tray icon either,
+    there was no way to quit it short of Task Manager. From the user's side the
+    app simply stopped opening, permanently, and re-downloading did nothing.
+
+    So this path now behaves like a real instance: a second launch re-opens the
+    browser tab, and the tray icon gives a way out.
+    """
     import time
     import webbrowser
     if why:
@@ -241,12 +259,40 @@ def _run_browser_fallback(url: str, why: str = "") -> None:
     else:
         print(f"pywebview not installed - opening {url} in your browser.")
         print("  (for the native window: pip install pywebview)")
-    webbrowser.open(url)
+
+    stop = threading.Event()
+
+    def open_tab() -> None:
+        try:
+            webbrowser.open(url)
+        except Exception:
+            pass
+
+    if app_cb is not None:
+        # a second launch lands here instead of finding nothing to show
+        app_cb["show"] = open_tab
+        app_cb["quit"] = stop.set
+
+    tray = None
+    if sys.platform == "win32":
+        try:
+            from .tray import start_tray
+            tray = start_tray(open_tab, stop.set, icon_path=icon_path())
+        except Exception:
+            tray = None
+    print("tray: ready" if tray else "tray: NOT available - quit via Task Manager")
+
+    open_tab()
     try:
-        while True:
-            time.sleep(3600)
+        while not stop.wait(1.0):
+            pass
     except KeyboardInterrupt:
-        return
+        pass
+    if tray:
+        try:
+            tray.stop()
+        except Exception:
+            pass
 
 
 _MIN_WINDOW = (900, 700)
