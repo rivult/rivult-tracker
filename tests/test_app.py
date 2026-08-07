@@ -159,3 +159,57 @@ class ArgParserTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WebView2FallbackTest(unittest.TestCase):
+    """A missing WebView2 runtime must degrade, not vanish.
+
+    THE BUG THIS CATCHES: webview.start() was called unguarded. pywebview is
+    bundled, so the ImportError fallback above it never fires — but the
+    RUNTIME it renders into is a separate Microsoft install that Windows 11
+    ships and some Windows 10 machines lack. With console=False the traceback
+    goes to rivult.log and nowhere the user can see, so the app simply did not
+    open: no window, no error, nothing to report.
+    """
+
+    def test_version_lookup_never_raises_off_windows_or_on_a_bare_registry(self):
+        import bedwars_parser.app as app
+        v = app.webview2_version()
+        self.assertTrue(v is None or isinstance(v, str))
+
+    def test_a_windowed_start_failure_reports_instead_of_raising(self):
+        import bedwars_parser.app as app
+
+        class Boom:
+            screens = []
+            def create_window(self, *a, **k):
+                raise RuntimeError("no runtime")
+
+        # must return False (caller falls back) rather than propagate
+        ok = app._run_windowed(Boom(), "http://127.0.0.1:1", ":memory:", {})
+        self.assertFalse(ok)
+
+    def test_the_fallback_message_is_used_when_one_is_given(self):
+        import bedwars_parser.app as app
+        printed = []
+        real_print = __builtins__["print"] if isinstance(__builtins__, dict) else print
+
+        import builtins
+        orig, builtins.print = builtins.print, lambda *a, **k: printed.append(" ".join(map(str, a)))
+        try:
+            import webbrowser
+            orig_open, webbrowser.open = webbrowser.open, lambda *a, **k: None
+            try:
+                # KeyboardInterrupt ends the sleep loop immediately
+                import time
+                orig_sleep, time.sleep = time.sleep, lambda *a: (_ for _ in ()).throw(KeyboardInterrupt)
+                try:
+                    app._run_browser_fallback("http://x", why="WEBVIEW2 MISSING")
+                finally:
+                    time.sleep = orig_sleep
+            finally:
+                webbrowser.open = orig_open
+        finally:
+            builtins.print = orig
+        self.assertTrue(any("WEBVIEW2 MISSING" in p for p in printed),
+                        f"reason not printed: {printed}")

@@ -19,6 +19,7 @@ from __future__ import annotations
 import os
 import sys
 import threading
+import traceback
 from typing import Optional
 
 from .clients import default_log
@@ -175,14 +176,71 @@ def run(log_path: Optional[str], db_path: str, host="127.0.0.1", port=8770) -> N
         _run_browser_fallback(url)
         return
 
-    _run_windowed(webview, url, db_path, app_cb)
+    # Pre-flight rather than let webview.start() throw. With console=False a
+    # traceback goes to rivult.log and NOWHERE the user can see, so a missing
+    # runtime looked exactly like "the app doesn't open" - no window, no error,
+    # nothing to report. Checking first turns that into a working app and a
+    # sentence explaining why it isn't in its own window.
+    wv2 = webview2_version()
+    print(f"webview2 runtime: {wv2 or 'NOT INSTALLED'}")
+    if sys.platform == "win32" and not wv2:
+        _run_browser_fallback(url, why=(
+            "The Microsoft WebView2 runtime isn't installed, so Rivult can't "
+            "open its own window.\n"
+            f"Opening {url} in your browser instead - everything works exactly "
+            "the same there.\n"
+            "  To get the native window, install the free 'Evergreen "
+            "Bootstrapper':\n"
+            "  https://developer.microsoft.com/microsoft-edge/webview2/\n"
+            "  (Windows 11 has it already; some Windows 10 installs do not.)"))
+        return
+
+    if not _run_windowed(webview, url, db_path, app_cb):
+        _run_browser_fallback(url, why=(
+            "Rivult could not open its own window - see the traceback above.\n"
+            f"Opening {url} in your browser instead; everything works there."))
 
 
-def _run_browser_fallback(url: str) -> None:
+# The WebView2 Evergreen runtime, which pywebview's Windows backend renders
+# into. Windows 11 ships it; a fresh or not-recently-updated Windows 10 may
+# not have it, and that is the difference between "opens fine on my PC" and
+# "does nothing on my friend's".
+_WEBVIEW2_CLIENT = r"Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}"
+
+
+def webview2_version() -> Optional[str]:
+    """Installed WebView2 runtime version, or None. Windows-only."""
+    if sys.platform != "win32":
+        return None
+    try:
+        import winreg
+    except ImportError:
+        return None
+    # per-machine 32-bit view first (where the Evergreen installer usually
+    # lands on x64), then per-machine native, then per-user
+    for hive, path in (
+        (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node" "\\" + _WEBVIEW2_CLIENT),
+        (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE" "\\" + _WEBVIEW2_CLIENT),
+        (winreg.HKEY_CURRENT_USER, r"SOFTWARE" "\\" + _WEBVIEW2_CLIENT),
+    ):
+        try:
+            with winreg.OpenKey(hive, path) as key:
+                version, _ = winreg.QueryValueEx(key, "pv")
+                if version and version != "0.0.0.0":
+                    return str(version)
+        except OSError:
+            continue
+    return None
+
+
+def _run_browser_fallback(url: str, why: str = "") -> None:
     import time
     import webbrowser
-    print(f"pywebview not installed - opening {url} in your browser.")
-    print("  (for the native window: pip install pywebview)")
+    if why:
+        print(why)
+    else:
+        print(f"pywebview not installed - opening {url} in your browser.")
+        print("  (for the native window: pip install pywebview)")
     webbrowser.open(url)
     try:
         while True:
@@ -211,10 +269,19 @@ def _window_size(webview) -> tuple[int, int]:
     return width, height
 
 
-def _run_windowed(webview, url: str, db_path: str, app_cb: dict) -> None:
-    """The pywebview path with close-to-tray (P13)."""
-    width, height = _window_size(webview)
-    window = webview.create_window("Rivult Tracker", url, width=width, height=height)
+def _run_windowed(webview, url: str, db_path: str, app_cb: dict) -> bool:
+    """The pywebview path with close-to-tray (P13).
+
+    Returns False if the window could not be created or run, so the caller can
+    fall back to a browser rather than the process simply dying.
+    """
+    try:
+        width, height = _window_size(webview)
+        window = webview.create_window("Rivult Tracker", url,
+                                       width=width, height=height)
+    except Exception:
+        traceback.print_exc()
+        return False
 
     store = Store(db_path)
     tray_enabled = store.get_meta("tray_enabled") != "0"
@@ -272,7 +339,19 @@ def _run_windowed(webview, url: str, db_path: str, app_cb: dict) -> None:
         return False          # cancel the close; we've hidden instead
 
     window.events.closing += on_closing
-    webview.start()
+    try:
+        webview.start()
+    except Exception:
+        # Anything the runtime check didn't catch. Stop the tray first, or the
+        # icon outlives the window and the app looks half-dead.
+        traceback.print_exc()
+        if tray:
+            try:
+                tray.stop()
+            except Exception:
+                pass
+        return False
+    return True
 
 
 def _show_first_hide_notice(db_path: str, tray) -> None:
